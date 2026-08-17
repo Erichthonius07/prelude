@@ -3,13 +3,20 @@
 # consistently by Roles 2, 3, and 4. Uncomment whichever the team picks —
 # don't install both, that's exactly the "two export paths for no reason"
 # problem the spec calls out.
+#
+# IMPORTANT if picking TensorFlow: TF 2.20 deprecates tf.lite — on-device
+# conversion/inference is moving to a separate project, LiteRT
+# (google-ai-edge/LiteRT). Role 5a's quantization work and Role 5b's TFLite
+# conversion smoke-test should target the LiteRT APIs, not the classic
+# tf.lite converter, if TensorFlow is the team's pick. This doesn't apply if
+# the team picks PyTorch (PyTorch's export path is separate from tf.lite).
 
 # --- Option A: PyTorch ---
-# torch>=2.2
-# torchvision>=0.17
+# torch==2.12.1
+# torchvision==0.27.1   # verify the torchvision version paired with torch 2.12.1 before locking
 
 # --- Option B: TensorFlow ---
-# tensorflow>=2.16
+# tensorflow==2.20.0
 
 # --- Shared, framework-agnostic ---
 numpy
@@ -20,5 +27,5 @@ pillow
 matplotlib
 requests
 
-# TFLite conversion path (Role 5a quantization, Role 5b conversion smoke-test)
-# ai-edge-litert   # successor to tf.lite; add once framework choice is locked
+# On-device conversion path (Role 5a quantization, Role 5b conversion smoke-test)
+# ai-edge-litert   # required if TensorFlow is chosen (see note above); uncomment once framework is locked

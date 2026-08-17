@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.3.2</version>
+    <version>4.1.0</version>
     <relativePath/>
   </parent>
 
@@ -18,7 +18,9 @@
   <description>Results Service backend — idempotent metric ingestion for the burst denoising pipeline (Role 1)</description>
 
   <properties>
-    <java.version>21</java.version>
+    <!-- Spring Boot 4.1.0 requires Java 17+ and supports up to Java 26;
+         Java 25 is the current LTS, verified compatible. -->
+    <java.version>25</java.version>
   </properties>
 
   <dependencies>

@@ -19,6 +19,21 @@ restormer-stretch/       Role 5b — Restormer conversion + fine-tuning + go/no-
 docs/                     Data contract, team map
 ```
 
+## Pinned versions
+
+| Component | Version |
+|---|---:|
+| Java | 25 (LTS) |
+| Spring Boot | 4.1.0 |
+| Maven | 3.9.16 |
+| PostgreSQL | 18-alpine |
+| Python | 3.13 |
+| PyTorch / TensorFlow | 2.12.1 / 2.20.0 (team must pick one — see below) |
+
+Full rationale and compatibility notes (including a real issue with TF 2.20
+deprecating `tf.lite` that affects Role 5a/5b) in `docs/versions.md`. Update
+there first if any version changes.
+
 ## Getting started
 
 1. **Clone the repo**, then copy the env template:
@@ -56,6 +71,7 @@ PR review (see `docs/team-map.md`).
 - [x] Repo + monorepo structure
 - [x] Docker Compose skeleton (Postgres + Results Service, boots but no real endpoints yet)
 - [x] Training container skeleton
+- [ ] PyTorch vs. TensorFlow decision (see `docs/versions.md` for the LiteRT consideration)
 - [ ] Data contract (`docs/data-contract.md`) — next up
 - [ ] Real ingestion API
 - [ ] Calibration tool

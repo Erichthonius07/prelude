@@ -1,0 +1,24 @@
+# ML framework choice is an OPEN TEAM DECISION per the Prelude (Section 2.1):
+# PyTorch vs TensorFlow must be locked ONCE, before Phase 1 ends, and used
+# consistently by Roles 2, 3, and 4. Uncomment whichever the team picks —
+# don't install both, that's exactly the "two export paths for no reason"
+# problem the spec calls out.
+
+# --- Option A: PyTorch ---
+# torch>=2.2
+# torchvision>=0.17
+
+# --- Option B: TensorFlow ---
+# tensorflow>=2.16
+
+# --- Shared, framework-agnostic ---
+numpy
+opencv-python-headless
+scipy
+scikit-learn
+pillow
+matplotlib
+requests
+
+# TFLite conversion path (Role 5a quantization, Role 5b conversion smoke-test)
+# ai-edge-litert   # successor to tf.lite; add once framework choice is locked

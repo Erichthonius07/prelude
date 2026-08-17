@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: burst-denoise-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  results-service:
+    build:
+      context: ./results-service
+    container_name: burst-denoise-results-service
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+    ports:
+      - "${RESULTS_SERVICE_PORT:-8080}:8080"
+
+volumes:
+  pgdata:
+
+# NOTE: this compose file runs on the team-controlled laptop that hosts the
+# Results Service (per the Prelude spec — local Wi-Fi, not cloud, not on-device).
+# Android devices on the team submit results to this laptop's LAN IP:8080.
+#
+# Training (Role 4/5b) and quantization (Role 5a) run as SEPARATE, on-demand
+# containers (see training/Dockerfile) — they don't belong in this always-on
+# stack, since they're heavy, GPU-hungry, and not something you want spinning
+# up every time someone runs `docker compose up`.

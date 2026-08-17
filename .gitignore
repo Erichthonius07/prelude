@@ -1,0 +1,54 @@
+# --- Env / secrets ---
+.env
+*.local.env
+
+# --- Java / Maven / Spring Boot (results-service) ---
+results-service/target/
+*.class
+*.jar
+!*/gradle/wrapper/*.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Python (training, quantization, restormer-stretch, scripts) ---
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Android (capture-android) ---
+capture-android/*.apk
+capture-android/*.aab
+capture-android/local.properties
+capture-android/.gradle/
+capture-android/build/
+capture-android/app/build/
+capture-android/.idea/
+capture-android/*.iml
+capture-android/captures/
+
+# --- Model artifacts / large binaries (do NOT commit checkpoints) ---
+*.ckpt
+*.pth
+*.h5
+*.tflite
+*.pb
+!**/sample_assets/*.tflite
+
+# --- Data (never commit raw datasets or captured bursts) ---
+data/
+datasets/
+*.raw
+*.dng
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# --- Postgres local volume (if bind-mounted) ---
+pgdata/

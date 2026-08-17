@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: results-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      # 'validate' once the real schema/migrations exist (Phase 2). 'update' is a
+      # convenience default for the very first bring-up before Flyway/Liquibase
+      # is wired in — swap this before the schema is published, per the
+      # add-only evolution policy in the spec.
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+server:
+  port: 8080

@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:18-alpine
-    container_name: burst-denoise-postgres
+    container_name: prelude-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -23,7 +23,7 @@ services:
   results-service:
     build:
       context: ./results-service
-    container_name: burst-denoise-results-service
+    container_name: prelude-results-service
     restart: unless-stopped
     depends_on:
       postgres:

@@ -1,4 +1,6 @@
-# Burst Low-Light Denoising & Fusion Engine
+# Prelude
+
+**Burst Low-Light Denoising & Fusion Engine**
 
 Multi-frame burst photography pipeline: Capture → Align → Fuse → Denoise (AI) →
 Post-process → Final Image. See `Prelude_Burst_Denoising_Engine.pdf` and

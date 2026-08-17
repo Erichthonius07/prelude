@@ -11,7 +11,7 @@
     <relativePath/>
   </parent>
 
-  <groupId>com.burstdenoise</groupId>
+  <groupId>com.prelude</groupId>
   <artifactId>results-service</artifactId>
   <version>0.1.0</version>
   <name>results-service</name>

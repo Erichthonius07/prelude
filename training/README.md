@@ -10,7 +10,7 @@ teammate should have spinning up whenever they run the Results Service stack.
 
 ## Build
 ```bash
-docker build -t burst-denoise-training .
+docker build -t prelude-training .
 ```
 
 ## Run (mount your code + data, don't bake them into the image)
@@ -18,7 +18,7 @@ docker build -t burst-denoise-training .
 docker run --rm -it \
   -v $(pwd)/../training:/workspace/training \
   -v $(pwd)/../data:/workspace/data \
-  burst-denoise-training
+  prelude-training
 ```
 
 Add `--gpus all` if running on a machine with an NVIDIA GPU + nvidia-container-toolkit installed.

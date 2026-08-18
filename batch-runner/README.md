@@ -9,4 +9,4 @@ images from storage.
 - Thermal-throttling handling: enforced spacing between runs, thermal state logged per submission
 - Uploads results to the Results Service in bulk
 
-_Not yet implemented — depends on the data contract and a working pipeline._
+**Status:** see `docs/STATUS.md` for build status and next action.

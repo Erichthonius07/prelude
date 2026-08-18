@@ -71,12 +71,5 @@ PR review (see `docs/team-map.md`).
 
 ## Status
 
-- [x] Repo + monorepo structure
-- [x] Docker Compose skeleton (Postgres + Results Service, boots but no real endpoints yet)
-- [x] Training container skeleton
-- [x] ML framework decision (TensorFlow — see `docs/versions.md` for the Restormer/PyTorch-checkpoint risk this surfaces)
-- [ ] Data contract (`docs/data-contract.md`) — next up
-- [ ] Real ingestion API
-- [ ] Calibration tool
-- [ ] Capture module
-- [ ] Batch runner
+See `docs/STATUS.md` for exactly what's built, what's not, who owns it, and
+what's blocking each piece — the single source of truth, not duplicated here.

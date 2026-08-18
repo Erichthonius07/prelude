@@ -13,4 +13,4 @@ Open this folder as an Android Studio project once scaffolded.
 - Calibration tool (in-app debug mode) — see `calibration-tool/`
 - pipeline_mode flag plumbing (alignment→fusion only)
 
-_Scaffolding (Gradle project, manifest, Camera2 boilerplate) not yet generated._
+**Status:** see `docs/STATUS.md` for build status and next action.

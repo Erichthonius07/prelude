@@ -21,33 +21,33 @@ actual config files listed in the right column.
   now version-namespaced internally (`/var/lib/postgresql/18/docker`).
   `docker-compose.yml` mounts the parent directory accordingly — don't revert
   this if you copy patterns from older Postgres tutorials.
-- **TensorFlow 2.20 deprecates `tf.lite`.** On-device conversion/inference is
-  moving to a separate project, **LiteRT** (pinned here at **2.1.5**, the
-  current latest release as of 2026-08-17 — note the person who first
-  suggested this said 2.1.6, which does not exist; verified the real latest
-  tag directly against the project's releases page before pinning). If the
-  team locks TensorFlow as the training framework, **Role 5a's quantization
-  work and Role 5b's TFLite conversion smoke-test need to target LiteRT's
-  APIs**, not the classic `tf.lite` converter — this directly affects the
-  Prelude spec's stated deployment stack ("TensorFlow Lite + NNAPI delegate").
-  Raise this with the team before the framework decision is finalized, not
-  after Role 4 has already trained against one path.
-- No compatibility issue found between PyTorch 2.12.1 and Python 3.13.
+- **TensorFlow 2.20 deprecates `tf.lite`.** On-device conversion/inference has
+  moved to a separate project, **LiteRT**, pinned here at **2.1.5** (the
+  current latest release, verified directly against the project's GitHub
+  releases page on 2026-08-17). Role 5a's quantization work and Role 5b's
+  TFLite conversion smoke-test must target LiteRT's APIs, not the classic
+  `tf.lite` converter — this directly affects the Prelude spec's stated
+  deployment stack ("TensorFlow Lite + NNAPI delegate").
 - `eclipse-temurin:25-jdk` / `25-jre` are used **without** the `-alpine`
   suffix — Alpine variants for a JDK release this recent (Java 25 GA'd
   September 2025) aren't reliably available across registries yet. Debian-based
   Temurin images are the safer default; revisit if image size becomes a
   problem.
 
-## Still open
-- ~~PyTorch vs. TensorFlow~~ — **Decided 2026-08-18: TensorFlow.** Locked in
-  `training/requirements.txt`.
-- **New risk surfaced by the TensorFlow decision**: Restormer's official
-  implementation and released pretrained checkpoints (Role 5b's stretch goal)
-  are PyTorch-only. There's no official TF/Keras port. Since 5b.1 requires
-  fine-tuning from a pretrained checkpoint rather than training from scratch,
-  this needs a resolution before Role 5b's Phase 1-2 work — either port the
-  PyTorch weights to TF, treat Restormer training as a scoped one-off PyTorch
-  exception, or let the already-scheduled Phase 1-2 conversion smoke-test
-  catch it as a hard blocker (which it's designed to do). See
-  `training/requirements.txt` for the full note.
+## Known risks (not version bugs, but consequences of the version decisions above)
+
+- **Restormer (Role 5b stretch goal) has no official TensorFlow/Keras
+  checkpoint.** The official implementation and pretrained weights
+  (swz30/Restormer) are PyTorch-only. Spec 5b.1 requires fine-tuning from a
+  pretrained checkpoint, not training from scratch — on a TensorFlow-locked
+  stack this needs one of: porting the PyTorch weights to TF/Keras, treating
+  Restormer as a scoped one-off PyTorch exception, or accepting it as a
+  candidate hard-blocker for the Phase 1-2 conversion smoke-test (which
+  exists specifically to catch this kind of thing early — see
+  `Role5b_Full_Spec.pdf` section 5b.2). **Not yet resolved — needs a team
+  decision before Role 5b's Phase 1-2 work starts.**
+
+## Resolved
+
+- ~~PyTorch vs. TensorFlow~~ — decided 2026-08-18: **TensorFlow**. Locked in
+  `training/requirements.txt`, no longer an open question.

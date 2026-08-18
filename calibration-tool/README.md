@@ -13,4 +13,4 @@ and document once.
 Auto-uploads the resulting device profile to the Results Service.
 One calibrated device = "Primary Device" for the official ablation.
 
-_Not yet implemented._
+**Status:** see `docs/STATUS.md` for build status and next action.

@@ -30,8 +30,8 @@ docs/                     Data contract, team map
 | Maven | 3.9.16 |
 | PostgreSQL | 18-alpine |
 | Python | 3.13 |
-| PyTorch / TensorFlow | 2.12.1 / 2.20.0 (team must pick one — see below) |
-| LiteRT | 2.1.5 (only relevant if TensorFlow is picked — see below) |
+| PyTorch / TensorFlow | **TensorFlow 2.20.0** (locked, team decision 2026-08-18) |
+| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) |
 
 Full rationale and compatibility notes (including a real issue with TF 2.20
 deprecating `tf.lite` that affects Role 5a/5b) in `docs/versions.md`. Update
@@ -74,7 +74,7 @@ PR review (see `docs/team-map.md`).
 - [x] Repo + monorepo structure
 - [x] Docker Compose skeleton (Postgres + Results Service, boots but no real endpoints yet)
 - [x] Training container skeleton
-- [ ] PyTorch vs. TensorFlow decision (see `docs/versions.md` for the LiteRT consideration)
+- [x] ML framework decision (TensorFlow — see `docs/versions.md` for the Restormer/PyTorch-checkpoint risk this surfaces)
 - [ ] Data contract (`docs/data-contract.md`) — next up
 - [ ] Real ingestion API
 - [ ] Calibration tool

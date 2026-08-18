@@ -10,9 +10,8 @@ actual config files listed in the right column.
 | Maven | 3.9.16 | `results-service/Dockerfile` (downloaded explicitly from Apache archive) |
 | PostgreSQL | 18-alpine | `docker-compose.yml` |
 | Python | 3.13 | `training/Dockerfile` |
-| PyTorch | 2.12.1 | `training/requirements.txt` (commented, pick one framework) |
-| TensorFlow | 2.20.0 | `training/requirements.txt` (commented, pick one framework) |
-| LiteRT | 2.1.5 | `training/requirements.txt` (`ai-edge-litert`) — needed if TensorFlow is chosen, see TF 2.20 note below |
+| ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
+| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt` |
 
 ## Known compatibility notes (verified 2026-08-17)
 
@@ -41,9 +40,14 @@ actual config files listed in the right column.
   problem.
 
 ## Still open
-- **PyTorch vs. TensorFlow** — team decision not yet made (Prelude 2.1). Given
-  the `tf.lite`/LiteRT churn above, this is worth deciding sooner rather than
-  later; it affects Role 5a and 5b's actual implementation path, not just a
-  training-time choice.
-- Exact `torchvision` version to pair with `torch==2.12.1` — not independently
-  verified, marked in `requirements.txt` to double-check before locking.
+- ~~PyTorch vs. TensorFlow~~ — **Decided 2026-08-18: TensorFlow.** Locked in
+  `training/requirements.txt`.
+- **New risk surfaced by the TensorFlow decision**: Restormer's official
+  implementation and released pretrained checkpoints (Role 5b's stretch goal)
+  are PyTorch-only. There's no official TF/Keras port. Since 5b.1 requires
+  fine-tuning from a pretrained checkpoint rather than training from scratch,
+  this needs a resolution before Role 5b's Phase 1-2 work — either port the
+  PyTorch weights to TF, treat Restormer training as a scoped one-off PyTorch
+  exception, or let the already-scheduled Phase 1-2 conversion smoke-test
+  catch it as a hard blocker (which it's designed to do). See
+  `training/requirements.txt` for the full note.

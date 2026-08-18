@@ -1,22 +1,22 @@
-# ML framework choice is an OPEN TEAM DECISION per the Prelude (Section 2.1):
-# PyTorch vs TensorFlow must be locked ONCE, before Phase 1 ends, and used
-# consistently by Roles 2, 3, and 4. Uncomment whichever the team picks —
-# don't install both, that's exactly the "two export paths for no reason"
-# problem the spec calls out.
+# ML framework: LOCKED to TensorFlow (team decision, 2026-08-18).
+# Used consistently by Roles 2, 3, and 4 per the Prelude (Section 2.1).
 #
-# IMPORTANT if picking TensorFlow: TF 2.20 deprecates tf.lite — on-device
-# conversion/inference is moving to a separate project, LiteRT
-# (google-ai-edge/LiteRT). Role 5a's quantization work and Role 5b's TFLite
-# conversion smoke-test should target the LiteRT APIs, not the classic
-# tf.lite converter, if TensorFlow is the team's pick. This doesn't apply if
-# the team picks PyTorch (PyTorch's export path is separate from tf.lite).
+# KNOWN RISK for Role 5b (Restormer stretch goal): Restormer's official
+# implementation and released pretrained checkpoints (swz30/Restormer) are
+# PyTorch-only — there is no official TensorFlow/Keras port. The spec
+# requires fine-tuning "from a pretrained checkpoint... not trained from
+# scratch" (5b.1). On a TensorFlow-locked stack, Role 5b either has to
+# port the PyTorch weights to TF/Keras manually (real extra work), train
+# Restormer as a one-off PyTorch exception just for the stretch goal, or
+# treat this as a hard blocker surfaced by the Phase 1-2 conversion
+# smoke-test (already scheduled early for exactly this reason). Flag to
+# the team before Role 5b's Phase 1-2 work starts.
+tensorflow==2.20.0
 
-# --- Option A: PyTorch ---
-# torch==2.12.1
-# torchvision==0.27.1   # verify the torchvision version paired with torch 2.12.1 before locking
-
-# --- Option B: TensorFlow ---
-# tensorflow==2.20.0
+# On-device conversion path (Role 5a quantization, Role 5b conversion smoke-test).
+# REQUIRED: TF 2.20 deprecates tf.lite — Role 5a/5b must target LiteRT's APIs,
+# not the classic tf.lite converter.
+ai-edge-litert==2.1.5
 
 # --- Shared, framework-agnostic ---
 numpy
@@ -26,6 +26,3 @@ scikit-learn
 pillow
 matplotlib
 requests
-
-# On-device conversion path (Role 5a quantization, Role 5b conversion smoke-test)
-# ai-edge-litert==2.1.5   # required if TensorFlow is chosen (see note above); uncomment once framework is locked

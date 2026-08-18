@@ -31,6 +31,7 @@ docs/                     Data contract, team map
 | PostgreSQL | 18-alpine |
 | Python | 3.13 |
 | PyTorch / TensorFlow | 2.12.1 / 2.20.0 (team must pick one — see below) |
+| LiteRT | 2.1.5 (only relevant if TensorFlow is picked — see below) |
 
 Full rationale and compatibility notes (including a real issue with TF 2.20
 deprecating `tf.lite` that affects Role 5a/5b) in `docs/versions.md`. Update

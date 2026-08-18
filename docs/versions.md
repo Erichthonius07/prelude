@@ -12,6 +12,7 @@ actual config files listed in the right column.
 | Python | 3.13 | `training/Dockerfile` |
 | PyTorch | 2.12.1 | `training/requirements.txt` (commented, pick one framework) |
 | TensorFlow | 2.20.0 | `training/requirements.txt` (commented, pick one framework) |
+| LiteRT | 2.1.5 | `training/requirements.txt` (`ai-edge-litert`) — needed if TensorFlow is chosen, see TF 2.20 note below |
 
 ## Known compatibility notes (verified 2026-08-17)
 
@@ -22,13 +23,16 @@ actual config files listed in the right column.
   `docker-compose.yml` mounts the parent directory accordingly — don't revert
   this if you copy patterns from older Postgres tutorials.
 - **TensorFlow 2.20 deprecates `tf.lite`.** On-device conversion/inference is
-  moving to a separate project, **LiteRT**. If the team locks TensorFlow as
-  the training framework, **Role 5a's quantization work and Role 5b's TFLite
-  conversion smoke-test need to target LiteRT's APIs**, not the classic
-  `tf.lite` converter — this directly affects the Prelude spec's stated
-  deployment stack ("TensorFlow Lite + NNAPI delegate"). Raise this with the
-  team before the framework decision is finalized, not after Role 4 has
-  already trained against one path.
+  moving to a separate project, **LiteRT** (pinned here at **2.1.5**, the
+  current latest release as of 2026-08-17 — note the person who first
+  suggested this said 2.1.6, which does not exist; verified the real latest
+  tag directly against the project's releases page before pinning). If the
+  team locks TensorFlow as the training framework, **Role 5a's quantization
+  work and Role 5b's TFLite conversion smoke-test need to target LiteRT's
+  APIs**, not the classic `tf.lite` converter — this directly affects the
+  Prelude spec's stated deployment stack ("TensorFlow Lite + NNAPI delegate").
+  Raise this with the team before the framework decision is finalized, not
+  after Role 4 has already trained against one path.
 - No compatibility issue found between PyTorch 2.12.1 and Python 3.13.
 - `eclipse-temurin:25-jdk` / `25-jre` are used **without** the `-alpine`
   suffix — Alpine variants for a JDK release this recent (Java 25 GA'd

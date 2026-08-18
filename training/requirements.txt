@@ -28,4 +28,4 @@ matplotlib
 requests
 
 # On-device conversion path (Role 5a quantization, Role 5b conversion smoke-test)
-# ai-edge-litert   # required if TensorFlow is chosen (see note above); uncomment once framework is locked
+# ai-edge-litert==2.1.5   # required if TensorFlow is chosen (see note above); uncomment once framework is locked

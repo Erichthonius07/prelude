@@ -1,48 +1,36 @@
 services:
-  postgres:
+  db:
     image: postgres:18-alpine
-    container_name: prelude-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-prelude}
+      POSTGRES_USER: ${POSTGRES_USER:-prelude}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - prelude-db-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    volumes:
-      # Postgres 18 changed the image's VOLUME from /var/lib/postgresql/data
-      # to /var/lib/postgresql, and PGDATA is now version-namespaced
-      # (/var/lib/postgresql/18/docker). Mount the parent dir, not /data.
-      - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-prelude} -d ${POSTGRES_DB:-prelude}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   results-service:
-    build:
-      context: ./results-service
-    container_name: prelude-results-service
+    build: ./results-service
     restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      # FIX: previously hardcoded the DB name separately from POSTGRES_DB, so changing
+      # one without the other silently broke the connection. Now derived from the same var.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-prelude}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-prelude}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PRELUDE_ADMIN_TOKEN: ${RESULTS_ADMIN_TOKEN:-}
     ports:
-      - "${RESULTS_SERVICE_PORT:-8080}:8080"
+      - "8080:8080"
 
 volumes:
-  pgdata:
-
-# NOTE: this compose file runs on the team-controlled laptop that hosts the
-# Results Service (per the Prelude spec — local Wi-Fi, not cloud, not on-device).
-# Android devices on the team submit results to this laptop's LAN IP:8080.
-#
-# Training (Role 4/5b) and quantization (Role 5a) run as SEPARATE, on-demand
-# containers (see training/Dockerfile) — they don't belong in this always-on
-# stack, since they're heavy, GPU-hungry, and not something you want spinning
-# up every time someone runs `docker compose up`.
+  prelude-db-data:

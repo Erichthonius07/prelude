@@ -1,27 +1,31 @@
 spring:
   application:
     name: results-service
+
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/prelude}
+    username: ${SPRING_DATASOURCE_USERNAME:prelude}
+    password: ${SPRING_DATASOURCE_PASSWORD:prelude}
+
   jpa:
     hibernate:
-      # 'validate' once the real schema/migrations exist (Phase 2). 'update' is a
-      # convenience default for the very first bring-up before Flyway/Liquibase
-      # is wired in — swap this before the schema is published, per the
-      # add-only evolution policy in the spec.
-      ddl-auto: update
-    properties:
-      hibernate:
-        format_sql: true
-    show-sql: false
+      # REPLACES the previous 'update': schema is owned by Flyway migrations only.
+      # 'validate' fails startup if entities drift from the migrated schema.
+      ddl-auto: validate
+    open-in-view: false
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
 
 server:
   port: 8080
+
+prelude:
+  # Placeholder auth for held-out manifest mutation endpoints (see open questions).
+  admin-token: ${PRELUDE_ADMIN_TOKEN:}
+
+logging:
+  level:
+    org.flywaydb: INFO

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:orientation="vertical" android:padding="24dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+
+        <TextView android:text="Calibration — debug mode" android:textStyle="bold"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Results Service base URL" android:layout_marginTop="16dp"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <EditText android:id="@+id/baseUrlInput" android:hint="http://<laptop-ip>:8080"
+            android:inputType="textUri" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <Button android:id="@+id/saveUrlButton" android:text="Save base URL"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <Button android:id="@+id/runBlurButton" android:text="Run blur/texture calibration"
+            android:layout_marginTop="16dp" android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/statusText" android:layout_marginTop="16dp"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView android:text="Blocked calculators:" android:textStyle="bold"
+            android:layout_marginTop="24dp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+        <TextView android:id="@+id/blockedText" android:layout_marginTop="8dp"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+    </LinearLayout>
+</ScrollView>

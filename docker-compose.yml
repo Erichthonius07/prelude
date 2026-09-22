@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-prelude}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
-      - prelude-db-data:/var/lib/postgresql/data
+      - prelude-db-data:/var/lib/postgresql
     ports:
       - "5432:5432"
     healthcheck:
@@ -23,6 +23,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      DEBUG: "true"
       # FIX: previously hardcoded the DB name separately from POSTGRES_DB, so changing
       # one without the other silently broke the connection. Now derived from the same var.
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-prelude}
@@ -30,7 +31,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       PRELUDE_ADMIN_TOKEN: ${RESULTS_ADMIN_TOKEN:-}
     ports:
-      - "8080:8080"
+      - "8081:8080"
 
 volumes:
   prelude-db-data:

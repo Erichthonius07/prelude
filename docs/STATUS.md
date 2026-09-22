@@ -2,6 +2,32 @@
 
 _Last updated by Role 1 after orchestrator ratification of the data contract (v1.0.0)._
 
+## Resolved history (was broken, now fixed — kept so STATUS stays trustworthy)
+
+- **Flyway never executed on boot.** Root cause: Spring Boot 4 split `FlywayAutoConfiguration`
+  into its own `spring-boot-starter-flyway` module — having `flyway-core` +
+  `flyway-database-postgresql` on the classpath was not sufficient to register the
+  autoconfiguration, so Flyway silently never ran. Fixed by adding `spring-boot-starter-flyway`.
+  Verified: migration applies, all 16 tables + `flyway_schema_history` present, app boots,
+  `GET /` returns `{"status":"up"}`.
+- **Schema type mismatch surfaced once Flyway actually ran.** `submission.payload_hash` and
+  `heldout_test_image.sha256` were `CHAR(64)` in the migration but mapped as
+  `String(length=64)` (→ `varchar(64)`) in the JPA entities. Fixed in
+  `V1__initial_schema.sql` directly — the migration had never been applied, so editing it in
+  place was safe.
+- **`captureBurst()` replaces sequential locked captures** in capture-android. No technical
+  blocker was found (blur rejection is a post-capture step, so nothing requires inspecting a
+  frame between captures). Switched to real hardware burst to minimize inter-frame gap, which
+  lands directly on Role 2 alignment.
+
+## Newly closed decisions
+
+- **batch-runner architecture** — an **Android instrumented test harness / in-app headless
+  runner, not a desktop script.** Reason: it must log per-device thermal state during
+  benchmarks via Android's Thermal API (`PowerManager` thermal status, API 30+), which only
+  exists on-device — the same reasoning that put the calibration tool inside capture-android.
+  Skeleton only; real implementation is blocked on the Roles 2/3/4 pipeline.
+
 ## Decision log — all formerly open items are resolved
 
 | Item | Resolution |
@@ -33,6 +59,8 @@ _Last updated by Role 1 after orchestrator ratification of the data contract (v1
 | Primary CNN training | 4 | Not started |
 | Quantization + deployment + discard-race | 5a | Blocked by Role 4 model |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
+| Pipeline-mode orchestration (`fusion_multi`/`fusion_single`) | 1 | Built + unit-tested as a pure decider (`com.prelude.pipeline.PipelineModeDecider`). |
+| batch-runner | 1 | Architecture decided (on-device instrumented harness). Skeleton only — blocked on full pipeline. |
 
 ## Engineering notes
 

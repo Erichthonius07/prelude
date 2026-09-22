@@ -23,7 +23,7 @@ CREATE TABLE submission (
     app_version   TEXT,
     occurred_at   TIMESTAMPTZ,
     received_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    payload_hash  CHAR(64) NOT NULL,
+    payload_hash  VARCHAR(64) NOT NULL,
     payload_json  TEXT NOT NULL,              -- canonical JSON, audit trail
     image_count   INTEGER NOT NULL DEFAULT 0
 );
@@ -251,7 +251,7 @@ CREATE INDEX bootstrap_comparison_result_run_idx ON bootstrap_comparison_result 
 
 CREATE TABLE heldout_test_image (
     image_id         TEXT PRIMARY KEY,
-    sha256           CHAR(64) NOT NULL UNIQUE,
+    sha256           VARCHAR(64) NOT NULL UNIQUE,
     source           TEXT NOT NULL,           -- sidd|team_capture
     manifest_version INTEGER NOT NULL DEFAULT 1,
     added_at         TIMESTAMPTZ NOT NULL DEFAULT now()

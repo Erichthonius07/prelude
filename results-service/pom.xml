@@ -45,6 +45,16 @@
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
 
+    <!-- Boot 4 modularized its auto-configuration: FlywayAutoConfiguration now lives in the
+         spring-boot-flyway module, which only spring-boot-starter-flyway pulls in. Declaring
+         flyway-core alone leaves the auto-configuration unregistered — Flyway silently never
+         runs (no error, no log lines) and ddl-auto:validate then fails on the empty schema.
+         flyway-core/flyway-database-postgresql stay declared: the starter brings the Spring
+         wiring but not the Flyway engine or the PostgreSQL dialect. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-flyway</artifactId>
+    </dependency>
     <!-- Flyway 10+ split database dialects out of flyway-core -->
     <dependency>
       <groupId>org.flywaydb</groupId>

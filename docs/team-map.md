@@ -2,7 +2,7 @@
 
 | Role | Folder(s) | Owns |
 |---|---|---|
-| 1 (you) | `capture-android/`, `results-service/`, `calibration-tool/`, `batch-runner/` | Capture, integration contracts, Results Service, calibration tool, orchestration flag, batch runner |
+| 1 | `capture-android/`, `results-service/`, `calibration-tool/`, `batch-runner/` | Capture, integration contracts, Results Service, calibration tool, orchestration flag, batch runner |
 | 2 | `alignment/` | Alignment + learned alignment-confidence classifier |
 | 3 | `fusion-postprocess-demo/` | Fusion (4-way) + post-processing + learned fusion model + demo app UI |
 | 4 | `training/` (shared) | Primary CNN training + fusion-residual training supplement |

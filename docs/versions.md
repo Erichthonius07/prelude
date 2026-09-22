@@ -13,6 +13,17 @@ actual config files listed in the right column.
 | ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
 | LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt` |
 
+| Component | Version | Locked | Propagate to |
+|---|---:|---|---|
+| AGP (Android Gradle Plugin) | 9.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `agp` |
+| Kotlin | 2.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `kotlin` |
+| compileSdk | 37 (Android 17) | 2026 | `capture-android/gradle/libs.versions.toml` → `compileSdk` |
+| minSdk | 31 (Android 12) | 2026 | `capture-android/gradle/libs.versions.toml` → `minSdk` |
+
+
+¹ Pinned from the orchestrator's live check (Kotlin 2.4.0 stable mid-2026; AGP 8.9.0, max API 35).
+Role 1's environment has no network/toolchain, so these could not be pulled directly. Run Android
+Studio's upgrade assistant once to confirm or bump — both are one-line changes in the catalog.
 ## Known compatibility notes (verified 2026-08-17)
 
 - **Spring Boot 4.1.0** requires Java 17+ and supports up to Java 26 — Java 25 is a valid, current choice.

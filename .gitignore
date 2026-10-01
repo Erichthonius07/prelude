@@ -6,6 +6,8 @@ target/
 *.class
 *.jar
 *.war
+# Exception: Gradle wrapper jar must be committed (Gradle wrapper convention)
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # Python
 __pycache__/

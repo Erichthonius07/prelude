@@ -11,7 +11,7 @@ actual config files listed in the right column.
 | PostgreSQL | 18-alpine | `docker-compose.yml` |
 | Python | 3.13 | `training/Dockerfile` |
 | ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
-| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt` |
+| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt`, `capture-android/gradle/libs.versions.toml` |
 
 | Component | Version | Locked | Propagate to |
 |---|---:|---|---|

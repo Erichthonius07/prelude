@@ -210,3 +210,16 @@ repo reconciled with `origin/main` (see Resolved history)._
 - Manifest admin auth is intentionally minimal (Q6); treat it as a convenience lock, not a security boundary.
 - The Results Service contract round-trip test (`ResultsServiceClientTest`) skips itself
   unless `PRELUDE_LIVE_URL` is set — CI runs it as a static schema check only.
+
+**Post-merge operational notes (2026-10-02, system-agent pass #2):**
+
+- **§10 status codes are now enforced**: ingestion and run-registration endpoints return
+  **201 on first acceptance, 200 with `duplicate: true` on idempotent replay** (they
+  previously returned 200 for both). Clients using generic success checks are unaffected;
+  any client asserting a literal 200 on a first POST must update.
+- **The Testcontainers CI gate needs Docker**: `IngestionApiIntegrationTest` starts its own
+  `postgres:18-alpine` container via `@ServiceConnection`; CI (and any dev running
+  `mvn test`) must have a reachable Docker daemon or those 5 tests cannot run.
+- **Role 5a's `:quantization-deploy` is pure Java as of `67b3bbd`** (the Kotlin sources were
+  replaced module-wide, 21 unit tests). Clones still carrying the old Kotlin sources just
+  pull — no local state carries over.

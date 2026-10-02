@@ -10,6 +10,7 @@ actual config files listed in the right column.
 | Maven | 3.9.16 | `results-service/Dockerfile` (downloaded explicitly from Apache archive) |
 | PostgreSQL | 18-alpine | `docker-compose.yml` |
 | Flyway schema | v2 (`V2__computed_bootstrap_result`) | `results-service/src/main/resources/db/migration/` |
+| Testcontainers (test scope) | 2.0.5 via imported `testcontainers-bom` — the Boot 4.1.0 BOM **no longer manages** `org.testcontainers:*`; `spring-boot-testcontainers` 4.1.0 was built against 2.0.5. 2.x module renames: `junit-jupiter` → `testcontainers-junit-jupiter`, `postgresql` → `testcontainers-postgresql` | `results-service/pom.xml` (`dependencyManagement` import; dependency entries carry no explicit pin) |
 | Python | 3.13 | `training/Dockerfile` |
 | ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
 | LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt`, `capture-android/gradle/libs.versions.toml` |

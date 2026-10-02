@@ -40,3 +40,6 @@ data/
 
 # Logs
 *.log
+
+.gradle/
+*.pkl

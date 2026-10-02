@@ -42,3 +42,9 @@ data/
 
 # Logs
 *.log
+
+# Android / capture-android: build outputs and machine-local files (never commit)
+local.properties
+capture-android/**/build/
+capture-android/.gradle/
+capture-android/.kotlin/

@@ -1,6 +1,8 @@
 # Prelude Data Contract — Results Service Ingestion & Pipeline Interchange
 - **Owner:** Role 1
 - **Status:** v1.0.0 — **ratified** by the orchestrator
+- **Addendum v1.1.0 — Read & Query API (§13):** drafted 2026-10-02, **ratification pending**
+  (normative shapes in `docs/data-contract-addendum-v1.1.0.md`; §13 below is the summary).
 - **Amendments locked at ratification:**
   1. `resultVersion` is server-assigned, monotonic per grouping key — never client-supplied (§3.2).
   2. Latest-wins is the documented default for **every** read path; full history only on explicit request (§3.2, §11).
@@ -449,3 +451,28 @@ WHERE run_id = 'phase3-int8-deploy' AND precision = 'int8';
 - Web starter is **`spring-boot-starter-webmvc`** (Spring Boot 4 modularization renamed `spring-boot-starter-web`; no reliance on any compatibility alias).
 - Transitive versions remain inherited from the Boot 4.1.0 parent; nothing pinned in `pom.xml`.
 - The Testcontainers smoke test (migrate + happy path + conflict path) stays as a CI gate as **standard regression coverage**, no longer as a compatibility probe.
+## 13. Read & query API — Contract Addendum v1.1.0 (drafted 2026-10-02, ratification pending)
+
+**Add-only amendment.** Every §10 ingestion endpoint keeps its current meaning. This section
+defines the read/query surface of the Results Service plus the server-computed paired
+bootstrap. Full request/response shapes, defaults and error codes live in
+`docs/data-contract-addendum-v1.1.0.md` (§13.1–13.9), which is the normative text for this
+section.
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/v1/runs` | Paged run list (`RunSummary`). |
+| `GET /api/v1/runs/{runId}` | Run detail (`RunDetail`, server-side planning defaults). |
+| `GET /api/v1/runs/{runId}/scores` | Per-image scores, `stage=batch_variant\|fusion` required; latest-wins default, `?history=true` for every stored version. |
+| `GET /api/v1/runs/{runId}/ablation` | The seven §5.7 variants with n, mean SSIM/PSNR, nearest-rank p95 latency. |
+| `GET /api/v1/runs/{runId}/snapshot` | Canonical demo-app document incl. `snapshotVersion` (SHA-256 of the canonical body). |
+| `POST /api/v1/runs/{runId}/bootstrap` | Compute + store a paired bootstrap (`PairedBootstrap`, 10k resamples, seeded `java.util.Random`, Bonferroni-corrected family α 0.05, `MIN_PAIRED_N = 5`); stored in `computed_bootstrap_result` (V2 migration) with server-assigned `result_version` per §3.2. |
+
+**Authentication posture (unchanged writes, open reads):** writes keep their existing auth —
+held-out manifest mutation (§8) stays guarded by the shared admin token
+(`X-Prelude-Admin-Token`) and ingestion (§10) stays as-is. The reads defined here, including
+the bootstrap compute endpoint, are **open on the LAN** (no token) — this matches the
+deployment model (one team laptop on local Wi-Fi) and the Q6 posture. Pagination follows
+§13.3 (`page` 0-based, `size` default 50, max 500); errors reuse the §10 `{code, message}`
+shape (`404 RUN_NOT_FOUND`, `400` for invalid requests, `409` when a bootstrap is not
+computable).

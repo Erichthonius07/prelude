@@ -9,6 +9,7 @@ actual config files listed in the right column.
 | Spring Boot | 4.1.0 | `results-service/pom.xml` (parent) |
 | Maven | 3.9.16 | `results-service/Dockerfile` (downloaded explicitly from Apache archive) |
 | PostgreSQL | 18-alpine | `docker-compose.yml` |
+| Flyway schema | v2 (`V2__computed_bootstrap_result`) | `results-service/src/main/resources/db/migration/` |
 | Python | 3.13 | `training/Dockerfile` |
 | ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
 | LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt`, `capture-android/gradle/libs.versions.toml` |
@@ -20,6 +21,7 @@ actual config files listed in the right column.
 | Gradle | 9.7.1 | 2026 | `capture-android/gradle/wrapper/gradle-wrapper.properties` |
 | compileSdk | 37 (Android 17) | 2026 | `capture-android/gradle/libs.versions.toml` → `compileSdk` |
 | minSdk | 31 (Android 12) | 2026 | `capture-android/gradle/libs.versions.toml` → `minSdk` |
+| LiteRT (Android runtime) | 2.1.5 | 2026-10-02 | `capture-android/gradle/libs.versions.toml` → `litert` (`com.google.ai.edge.litert:litert`, consumed by `:quantization-deploy`) |
 
 
 ¹ Pinned from the orchestrator's live check (Kotlin 2.4.0 stable mid-2026; AGP 8.9.0, max API 35).

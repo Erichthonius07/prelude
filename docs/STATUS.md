@@ -1,7 +1,10 @@
 # Prelude — Build Status (single source of truth)
 
-_Last updated 2026-10-02 by Role 1, after the first real capture-android build
-(JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-trip._
+_Last updated 2026-10-02 by Role 1's **system agent** (verification pass): Read API +
+paired bootstrap verified end-to-end, Flyway V1+V2 verified on a fresh volume, and the
+repo reconciled with `origin/main` (7 Role 5a commits arrived mid-pass from a stale local
+clone — see Resolved history). Prior entry: Role 1, after the first real capture-android
+build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-trip._
 
 ## Resolved history (was broken, now fixed — kept so STATUS stays trustworthy)
 
@@ -46,6 +49,30 @@ _Last updated 2026-10-02 by Role 1, after the first real capture-android build
   reach it — `MainActivity` (capture button) and `CalibrationActivity` (`runBlurCalibration`
   focus sweep) — check and request CAMERA permission before constructing the manager. The
   scoped `@SuppressLint` documents that contract.
+- **System-agent verification pass (2026-10-02) — three discrepancies found and fixed before
+  verification could run:**
+  1. `V2__computed_bootstrap_result.sql` contained the `CREATE TABLE` + indexes **twice** —
+     Flyway would have failed on the duplicate `CREATE TABLE`. Deduplicated; fresh-volume boot
+     then applied V1+V2 cleanly.
+  2. `PairedBootstrapTest` existed only as an **empty 5-line stub** in
+     `src/test/java/com/prelude/resultsservice/` (wrong package, no tests). The real 11
+     property tests were authored into `src/test/java/com/prelude/resultsservice/stats/` per
+     the addendum (pairing/order, null handling, input validation, seed determinism,
+     independent reference-implementation cross-check, degenerate intervals, Bonferroni
+     monotonicity, variant-swap mirror, metadata echo). Note: no ingestion/idempotency/
+     leakage-guard JUnit tests exist anywhere in the repo — those service behaviors are
+     covered only by the live round-trip and the (still-to-do) Testcontainers CI gate.
+  3. **Stale local clone during the pass.** The working tree did **not** contain the Role 5a
+     handoff, so an interim `:quantization-deploy` scaffold was applied locally under
+     `capture-android/` before the module was found to exist upstream. `git fetch` then
+     revealed local `main` was 7 commits behind `origin/main` — including Role 5a's real
+     integration (`089a3d5`, `6fd0150`: root-level `quantization-deploy/` Android library
+     wired into capture-android via a `projectDir` override, discard-race timeout, tiling,
+     `litert = "2.1.5"` pinned — same coordinate `com.google.ai.edge.litert:litert`, plus an
+     FP32 conversion smoke test and the nearest-rank p95 calibration API). Resolution: the
+     interim scaffold and Gradle edits were **discarded**, `main` fast-forwarded to
+     `origin/main` (8ec4bdc), and doc updates were re-applied on top. The post-pull
+     `gradlew build` re-verification below covers Role 5a's real module and its tests.
 
 ## Reconstructed code — verified against the contract (2026-10-02)
 
@@ -79,6 +106,27 @@ _Last updated 2026-10-02 by Role 1, after the first real capture-android build
 - **Calibration tool form factor** — in-app debug mode inside `capture-android` (on-device
   Thermal + TFLite access ruled out a desktop script). Blur/texture threshold implemented;
   the other three calculators are stubs blocked on Roles 2/3/4/5a.
+- **Read/Query API (Q8)** — **implemented** (`read/` package: `ReadController`, `ReadService`,
+  `ReadDtos`, dedicated exception advice — no existing files edited). Endpoints: paged runs +
+  run detail, per-image scores (latest-wins `DISTINCT ON`, `?history=true` for full history),
+  ablation (the seven §5.7 variants with n / mean SSIM / PSNR / nearest-rank p95 latency),
+  snapshot (canonical demo-app doc incl. SHA-256 `snapshotVersion`), and bootstrap
+  compute-and-store. Contract addendum v1.1.0 drafted (`docs/data-contract-addendum-v1.1.0.md`,
+  now complete through §13.9; §13 summary appended to the contract). **Pending orchestrator
+  ratification.**
+- **Paired bootstrap** — pure Java (`stats/` package, no framework imports): 10k resamples,
+  seeded `java.util.Random` (JDK-specified sequence → reproducible on any JVM), Bonferroni
+  correction (family α 0.05 ÷ run's `plannedComparisons`), `MIN_PAIRED_N = 5`,
+  `significant` iff corrected CI excludes zero else `directional`. Covered by 11 property
+  tests. Verified live against the smoke run (both metrics `significant`, intervals stored).
+- **V2 Flyway migration** — additive `computed_bootstrap_result` table (append-only bootstrap
+  storage, server-assigned `result_version`, same §3.2 rule as scores). Verified: fresh volume
+  → `Successfully applied 2 migrations`, schema history 2/2 success, 17 app tables.
+- **Role 5a integration** — real module integrated by Role 5a on `origin/main` (root-level
+  `quantization-deploy/` with denoise/tiling/discard-race sources and tests, wired into
+  capture-android via a `projectDir` override; `litert = "2.1.5"` pinned in
+  `libs.versions.toml`, mirrored into `docs/versions.md`). Re-verified on this machine
+  post-pull: `gradlew clean build` green with the module in the graph.
 
 ## Decision log — all formerly open items are resolved
 
@@ -92,7 +140,7 @@ _Last updated 2026-10-02 by Role 1, after the first real capture-android build
 | Data location (Q5) | Final: `data/{sidd, team-captures, held-out, calibration, checkpoints}/`, gitignored, documented in root README. |
 | Manifest admin auth (Q6) | Shared static env token is sufficient. **Intentionally minimal — not a real security boundary.** Do not extend without a new decision. |
 | `pipeline_mode` (Q7) | Exact values: `fusion_multi` / `fusion_single` (literal spec values). |
-| Read/query API (Q8) | **Out of scope — flagged as the next brief** (demo-app reads, bootstrap report retrieval). |
+| Read/query API (Q8) | **Implemented 2026-10-02** (see Newly closed decisions). Addendum v1.1.0 drafted — **pending ratification**; reads open on the LAN, writes keep their existing auth. |
 | `imageId` convention (Q9) | Confirmed: one ID assigned at capture (FrameBurst `burstId`), carried unchanged through every stage and submission. |
 
 ## Module status
@@ -102,7 +150,7 @@ _Last updated 2026-10-02 by Role 1, after the first real capture-android build
 | Data contract (`docs/data-contract.md`) | 1 | ✅ v1.0.0 ratified |
 | Results Service ingestion API | 1 | ✅ Implemented incl. server-assigned supersede versions; capture stage verified by live client round-trip (2026-10-02) |
 | Results Service schema evolution | 1 | ✅ Flyway + `ddl-auto: validate`; add-only policy in force |
-| Read/query API (demo app, bootstrap retrieval) | 1 | ⏭ Next brief (Q8) |
+| Read/query API (demo app, bootstrap retrieval) | 1 | ✅ Implemented (pending ratification of addendum v1.1.0); verified live incl. bootstrap compute-and-store (2026-10-02) |
 | Capture (Android) | 1 | ✅ Builds + unit tests green on JDK 25 / Gradle 9.7.1 / AGP 9.4.0 built-in Kotlin (2026-10-02). Camera path is static-review only — no device run yet. |
 | Calibration tool | 1 | In-app debug mode (closed decision). Blur/texture threshold built; alignment floor + min-frame-count + inference timeout stubbed, blocked on Roles 2/3/4/5a. |
 | Pipeline-mode orchestration (`fusion_multi`/`fusion_single`) | 1 | ✅ Pure decider (`com.prelude.pipeline.PipelineModeDecider`) reimplemented from its test — 11/11 unit tests. |
@@ -112,6 +160,18 @@ _Last updated 2026-10-02 by Role 1, after the first real capture-android build
 | Primary CNN training | 4 | Not started |
 | Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + Android module scaffold implemented. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference blocked by Role 4 checkpoint (2026-10-02) |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
+
+## Open issues & architectural gaps (escalated to the orchestrator — do NOT silently fix)
+
+- **`alignmentConfidenceFloor` delivery gap.** There is **no runtime delivery path and no API
+  format** for the calibrated alignment-confidence floor: the calculator in the calibration
+  tool is a stub blocked on Role 2's RANSAC, and `CalibrationRepository` neither persists nor
+  loads the value. **Decision needed from the orchestrator:** on-device read path vs. a
+  Results Service endpoint. **Do not invent a wire format until that decision is made.**
+- **Role 2 RANSAC labeling threshold.** Role 2 asked for a calibrated inlier-ratio cutoff for
+  training labels; that is a **training-time artifact, not the runtime floor** (distinct from
+  the gap above). Recommended approach: data-driven — derive the cutoff from real RANSAC
+  output once Role 2 builds it, rather than picking a constant now.
 
 ## Engineering notes
 

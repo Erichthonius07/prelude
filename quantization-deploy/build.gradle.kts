@@ -14,14 +14,7 @@ android {
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-    }
-}
-
 dependencies {
-    implementation(libs.kotlinx.coroutines.android)
     // LiteRT dependency — added when inference code is written:
     // implementation(libs.litert)
 

@@ -7,3 +7,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "prelude-capture"
 include(":app")
+include(":quantization-deploy")
+project(":quantization-deploy").projectDir = file("../quantization-deploy")

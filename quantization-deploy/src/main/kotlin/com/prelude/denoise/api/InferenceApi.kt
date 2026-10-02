@@ -6,16 +6,18 @@ import com.prelude.denoise.timeout.SystemTimeSource
 import com.prelude.denoise.timeout.TimeSource
 
 /**
+ * Hook for reading the device's thermal state before/during calibration.
+ * Role 1 provides the implementation (e.g. mapping to Android's PowerManager).
+ */
+interface ThermalStateProvider {
+    fun getCurrentThermalStatus(): Int
+}
+
+/**
  * Clean API for Role 1's `InferenceTimeoutCalculator` to run real inference
  * and collect per-image latencies (rule D6).
  *
- * This runs inference WITHOUT the discard-race timeout, measuring raw latency
- * for the calibration tool to compute p95 + 20% (T4).
- *
- * Usage: Role 1 calls [runInferenceForLatencyNs] repeatedly with representative
- * inputs, collects the latency distribution, then computes the calibrated
- * timeout via `DeviceThresholds.inferenceTimeoutMs`.
- *
+ * This computes the nearest-rank p95 latency.
  * No concurrent calls allowed (rule D4).
  */
 class InferenceApi(
@@ -23,15 +25,47 @@ class InferenceApi(
     private val timeSource: TimeSource = SystemTimeSource,
 ) {
     /**
-     * Run a single inference and return the latency in nanoseconds.
-     * This blocks until inference completes (no timeout applied).
-     *
-     * @param input The fused frame to denoise.
-     * @return Inference latency in nanoseconds.
+     * Executes a calibration run of [runs] inferences (excluding [warmupRuns])
+     * on the actual LiteRT inference engine.
+     * 
+     * @return The nearest-rank p95 latency in milliseconds.
+     * @throws IllegalStateException if the thermal state exceeds normal (e.g., > 1) during calibration.
      */
-    fun runInferenceForLatencyNs(input: FusedFrame): Long {
-        val startNs = timeSource.nanoTime()
-        inferenceRunner.run(input)
-        return timeSource.nanoTime() - startNs
+    fun calibrateLatency(
+        runs: Int = 100,
+        warmupRuns: Int = 5,
+        thermalStateProvider: ThermalStateProvider,
+        dummyInput: FusedFrame // Required to feed the pipeline
+    ): Long {
+        if (thermalStateProvider.getCurrentThermalStatus() > 1) { // 1 = THERMAL_STATUS_LIGHT, 0 = NONE
+            throw IllegalStateException("Device is thermally throttled before calibration.")
+        }
+
+        // Warm-up phase
+        for (i in 0 until warmupRuns) {
+            inferenceRunner.run(dummyInput)
+        }
+
+        val latencies = LongArray(runs)
+
+        // Measurement phase
+        for (i in 0 until runs) {
+            if (thermalStateProvider.getCurrentThermalStatus() > 1) {
+                throw IllegalStateException("Device thermally throttled during calibration.")
+            }
+
+            val startNs = timeSource.nanoTime()
+            inferenceRunner.run(dummyInput)
+            val durationNs = timeSource.nanoTime() - startNs
+            latencies[i] = durationNs
+        }
+
+        // Nearest-rank p95 computation
+        latencies.sort()
+        val p95Index = Math.ceil(0.95 * runs).toInt() - 1
+        val safeIndex = p95Index.coerceIn(0, runs - 1)
+        
+        // Convert to milliseconds
+        return latencies[safeIndex] / 1_000_000L
     }
 }

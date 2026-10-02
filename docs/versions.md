@@ -9,21 +9,26 @@ actual config files listed in the right column.
 | Spring Boot | 4.1.0 | `results-service/pom.xml` (parent) |
 | Maven | 3.9.16 | `results-service/Dockerfile` (downloaded explicitly from Apache archive) |
 | PostgreSQL | 18-alpine | `docker-compose.yml` |
+| Flyway schema | v2 (`V2__computed_bootstrap_result`) | `results-service/src/main/resources/db/migration/` |
 | Python | 3.13 | `training/Dockerfile` |
 | ML framework | **TensorFlow 2.20.0** (locked, team decision) | `training/requirements.txt` |
-| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt` |
+| LiteRT | 2.1.5 (required — TF 2.20 deprecates `tf.lite`) | `training/requirements.txt`, `capture-android/gradle/libs.versions.toml` |
 
 | Component | Version | Locked | Propagate to |
 |---|---:|---|---|
 | AGP (Android Gradle Plugin) | 9.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `agp` |
-| Kotlin | 2.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `kotlin` |
+| Kotlin | 2.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `kotlin`; buildscript classpath pin in `capture-android/build.gradle.kts` |
+| Gradle | 9.7.1 | 2026 | `capture-android/gradle/wrapper/gradle-wrapper.properties` |
 | compileSdk | 37 (Android 17) | 2026 | `capture-android/gradle/libs.versions.toml` → `compileSdk` |
 | minSdk | 31 (Android 12) | 2026 | `capture-android/gradle/libs.versions.toml` → `minSdk` |
+| LiteRT (Android runtime) | 2.1.5 | 2026-10-02 | `capture-android/gradle/libs.versions.toml` → `litert` (`com.google.ai.edge.litert:litert`, consumed by `:quantization-deploy`) |
 
 
 ¹ Pinned from the orchestrator's live check (Kotlin 2.4.0 stable mid-2026; AGP 8.9.0, max API 35).
-Role 1's environment has no network/toolchain, so these could not be pulled directly. Run Android
-Studio's upgrade assistant once to confirm or bump — both are one-line changes in the catalog.
+Role 1's environment had no network/toolchain at pin time. **Verified 2026-10-01:** the
+AGP 9.4.0 / Kotlin 2.4.0 / Gradle 9.7.1 toolchain now compiles the module end-to-end
+(`gradlew build` on JDK 25), so the pins are no longer speculative.
+
 ## Known compatibility notes (verified 2026-08-17)
 
 - **Spring Boot 4.1.0** requires Java 17+ and supports up to Java 26 — Java 25 is a valid, current choice.

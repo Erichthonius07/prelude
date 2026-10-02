@@ -53,6 +53,11 @@ Capture a burst in low light, align, fuse, denoise with a neural model, and post
 | **Java** | `25` (LTS) | |
 | **Spring Boot** | `4.1.0` | |
 | **Maven** | `3.9.16` | |
+| **AGP** | `9.4.0` | Built-in Kotlin support. |
+| **Kotlin** | `2.4.0` | Pinned via buildscript classpath (upgrades AGP's bundled 2.2.10). |
+| **Gradle** | `9.7.1` | Via wrapper. |
+| **compileSdk** | `37` (Android 17) | |
+| **minSdk** | `31` (Android 12) | Required for batch-runner Thermal API (API 30+). |
 | **PostgreSQL** | `18-alpine` | |
 | **Flyway** | `12.4.0` | Boot-managed. PG 18 verified. |
 | **Python** | `3.13` | |
@@ -60,6 +65,25 @@ Capture a burst in low light, align, fuse, denoise with a neural model, and post
 | **LiteRT** | `2.1.5` | Required. TF 2.20 deprecates `tf.lite`. |
 
 *Full rationale and compatibility notes live in `docs/versions.md`. Update there first if anything changes.*
+
+---
+
+### Prerequisites
+
+**Step zero for any new machine:** run the preflight check and fix what it reports.
+
+```powershell
+# Windows
+.\scripts\check-setup.ps1
+```
+```bash
+# macOS / Linux
+./scripts/check-setup.sh
+```
+
+It verifies Docker (daemon running), Docker Compose, JDK 25, the Android SDK,
+the Gradle wrapper, and `.env` — report-only, it fixes nothing automatically.
+Expected versions are listed in [Pinned Versions](#pinned-versions).
 
 ---
 
@@ -79,7 +103,7 @@ docker compose up --build
 ```
 This starts the **Results Service** and **PostgreSQL**.  
 Verify the health check: `curl http://localhost:8080/` should return `{"status":"up"}`.  
-*Note: This stack should run on one team-controlled laptop over local Wi-Fi, reachable by all Android devices on the same network.*
+*Port override: if 8080 is taken on your machine (e.g. by the Oracle listener), set `RESULTS_PORT=8081` in `.env` and use that port instead. This stack should run on one team-controlled laptop over local Wi-Fi, reachable by all Android devices on the same network.*
 
 #### 3. Training and ML work (Roles 2–5b)
 Use the separate, on-demand container defined in `training/README.md`. **Do not** add it to the root `docker-compose.yml`; it is resource-heavy and not required for all roles.

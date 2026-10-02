@@ -1,6 +1,8 @@
 [versions]
 # Central single source of truth; mirrored in docs/versions.md. Bump both together.
 # Confirmed via orchestrator toolchain check (2026).
+# kotlin: consumed via the buildscript classpath pin in the root build.gradle.kts
+# (AGP 9 built-in Kotlin upgrade mechanism) — not applied as a plugin.
 agp = "9.4.0"
 kotlin = "2.4.0"
 compileSdk = "37"      # Android 17
@@ -13,6 +15,8 @@ material = "1.12.0"
 coroutines = "1.9.0"
 okhttp = "4.12.0"
 junit = "4.13.2"
+json = "20240303"
+litert = "2.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -21,7 +25,9 @@ material = { group = "com.google.android.material", name = "material", version.r
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+json = { group = "org.json", name = "json", version.ref = "json" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+android-library = { id = "com.android.library", version.ref = "agp" }

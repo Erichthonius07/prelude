@@ -6,6 +6,8 @@ target/
 *.class
 *.jar
 *.war
+# Exception: Gradle wrapper jar must be committed (Gradle wrapper convention)
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # Python
 __pycache__/
@@ -40,3 +42,11 @@ data/
 
 # Logs
 *.log
+
+.gradle/
+*.pkl
+# Android / capture-android: build outputs and machine-local files (never commit)
+local.properties
+capture-android/**/build/
+capture-android/.gradle/
+capture-android/.kotlin/

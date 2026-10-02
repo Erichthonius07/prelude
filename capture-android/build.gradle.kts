@@ -1,32 +1,14 @@
+// Root build script: declares plugin versions for subprojects; not a module itself.
+buildscript {
+    dependencies {
+        // AGP 9.x enables built-in Kotlin (bundled KGP 2.2.10). Adding a higher KGP
+        // version here is the documented way to upgrade the built-in Kotlin version.
+        // Must stay in sync with the `kotlin` version in gradle/libs.versions.toml.
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.0")
+    }
+}
+
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
-}
-
-android {
-    namespace = "com.prelude.capture"
-    compileSdk = libs.versions.compileSdk.get().toInt()
-    defaultConfig {
-        applicationId = "com.prelude.capture"
-        minSdk = libs.versions.minSdk.get().toInt()
-        targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "0.1.0"
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions { jvmTarget = "17" }
-    buildFeatures { viewBinding = true }
-}
-
-dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.okhttp)
-
-    testImplementation(libs.junit)
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
 }

@@ -16,14 +16,17 @@ actual config files listed in the right column.
 | Component | Version | Locked | Propagate to |
 |---|---:|---|---|
 | AGP (Android Gradle Plugin) | 9.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `agp` |
-| Kotlin | 2.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `kotlin` |
+| Kotlin | 2.4.0 | 2026 | `capture-android/gradle/libs.versions.toml` → `kotlin`; buildscript classpath pin in `capture-android/build.gradle.kts` |
+| Gradle | 9.7.1 | 2026 | `capture-android/gradle/wrapper/gradle-wrapper.properties` |
 | compileSdk | 37 (Android 17) | 2026 | `capture-android/gradle/libs.versions.toml` → `compileSdk` |
 | minSdk | 31 (Android 12) | 2026 | `capture-android/gradle/libs.versions.toml` → `minSdk` |
 
 
 ¹ Pinned from the orchestrator's live check (Kotlin 2.4.0 stable mid-2026; AGP 8.9.0, max API 35).
-Role 1's environment has no network/toolchain, so these could not be pulled directly. Run Android
-Studio's upgrade assistant once to confirm or bump — both are one-line changes in the catalog.
+Role 1's environment had no network/toolchain at pin time. **Verified 2026-10-01:** the
+AGP 9.4.0 / Kotlin 2.4.0 / Gradle 9.7.1 toolchain now compiles the module end-to-end
+(`gradlew build` on JDK 25), so the pins are no longer speculative.
+
 ## Known compatibility notes (verified 2026-08-17)
 
 - **Spring Boot 4.1.0** requires Java 17+ and supports up to Java 26 — Java 25 is a valid, current choice.

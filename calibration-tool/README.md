@@ -1,16 +1,15 @@
-# calibration-tool/ — Role 1
+# Calibration Tool — Status
 
-Single deterministic implementation of all four per-device thresholds. Can be
-an in-app debug mode (see `capture-android/`) or a headless script — decide
-and document once.
+**Closed decision:** this is implemented as an in-app debug mode inside
+`capture-android`, not a separate module or script. On-device Thermal
+and TFLite API access requires running on-device, which ruled out a
+desktop script.
 
-## Computes (per spec 2.3 / Prelude 4.2)
-1. Blur threshold — texture-bucketed (low/medium/high via gradient-magnitude histogram)
-2. Alignment confidence floor — from RANSAC inlier-ratio distribution
-3. Minimum usable frame count — marginal SSIM gain < 0.005, or fused < best single frame
-4. Inference timeout — p95 latency + 20%, hard ceiling 500ms
+Real implementation lives at:
+`capture-android/app/src/main/java/com/prelude/capture/calibration/`
 
-Auto-uploads the resulting device profile to the Results Service.
-One calibrated device = "Primary Device" for the official ablation.
-
-**Status:** see `docs/STATUS.md` for build status and next action.
+Computes four per-device thresholds:
+- Blur/texture threshold (bucketed) — built
+- Alignment confidence floor — stubbed, blocked on Role 2
+- Minimum usable frame count — stubbed, blocked on Role 2 + Role 3
+- Inference timeout (p95 + 20%, cap 500ms) — stubbed, blocked on Role 4 + Role 5a

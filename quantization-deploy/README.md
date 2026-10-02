@@ -6,22 +6,33 @@ build status and next action.
 
 ## Module structure
 
-Android library module included by `capture-android` via
+Android library module (pure **Java**) included by `capture-android` via
 `include(":quantization-deploy")` in `settings.gradle.kts`.
 
 ```
-src/main/kotlin/com/prelude/denoise/
-├── DenoiseModule.kt          — top-level API: FusedFrame → DenoisedFrame
-├── api/InferenceApi.kt       — latency-measurement API for calibration (D6)
+src/main/java/com/prelude/denoise/
+├── DenoiseModule.java          — top-level API: FusedFrame → DenoisedFrame
+├── api/
+│   ├── InferenceApi.java       — latency-measurement API for calibration (D6)
+│   └── ThermalStateProvider.java — thermal hook interface for Role 1
 ├── model/
-│   ├── FusedFrame.kt         — input contract object (§6.3)
-│   └── DenoisedFrame.kt      — output contract object (§6.4)
+│   ├── FusedFrame.java         — input contract object (§6.3)
+│   └── DenoisedFrame.java      — output contract object (§6.4)
+├── tiling/
+│   └── Tiler.java              — overlapping-tile inference with halo-drop + linear blend (D3)
 └── timeout/
-    ├── DiscardRaceRunner.kt   — core discard-race mechanism (T1–T8)
-    ├── InferenceRunner.kt     — inference abstraction (stubbed)
-    ├── RaceResult.kt          — race outcome with live state
-    ├── RaceState.kt           — CAS state machine enum
-    └── TimeSource.kt          — injectable clock
+    ├── DiscardRaceRunner.java   — core discard-race mechanism (T1–T8)
+    ├── InferenceRunner.java     — inference abstraction (interface, stubbed)
+    ├── RaceResult.java          — race outcome with live state
+    ├── RaceState.java           — CAS state machine enum
+    ├── TimeSource.java          — injectable clock interface (T7)
+    └── SystemTimeSource.java    — default clock (System.nanoTime)
+```
+
+### Python scripts
+```
+convert_smoke.py    — PyTorch → LiteRT FP32 conversion + parity gate
+requirements.txt    — Python deps (ai-edge-torch, ai-edge-quantizer)
 ```
 
 ## Dependencies
@@ -29,7 +40,6 @@ src/main/kotlin/com/prelude/denoise/
 | Dependency | Version | Why | Where pinned | Source |
 |---|---|---|---|---|
 | `com.google.ai.edge.litert:litert` | 2.1.5 | On-device LiteRT inference runtime | `capture-android/gradle/libs.versions.toml` | [Google Maven](https://maven.google.com/web/index.html#com.google.ai.edge.litert:litert) |
-| `org.jetbrains.kotlinx:kotlinx-coroutines-android` | 1.9.0 | Coroutines for background threading | `capture-android/gradle/libs.versions.toml` | [Maven Central](https://central.sonatype.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-android) |
 | `ai-edge-torch` (LiteRT Torch) | 0.7.2 | PyTorch to LiteRT FP32 conversion | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-torch/) |
 | `ai-edge-quantizer` | 0.4.1 | INT8 Post-Training Quantization (PTQ) | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-quantizer/) |
 
@@ -44,6 +54,14 @@ The spec says "NNAPI delegate", but **NNAPI is deprecated since Android 15**
 baseline). GPU/NPU acceleration via CompiledModel API is a future measured
 experiment with explicit CPU fallback. See rule D2.
 
+## Language decision: Java (not Kotlin)
+
+The Android module uses **plain Java** for all on-device code. Rationale:
+- Role 5a's primary toolchain is Python (conversion, quantization, evaluation)
+- Java is simpler to maintain for the team than Kotlin
+- No Kotlin compiler overhead; AGP 9's built-in Kotlin is used only by Role 1's code
+- All thread-safety via `java.util.concurrent.atomic` (AtomicBoolean, AtomicReference, CAS)
+
 ## Discard-race timeout
 
 Implemented per rules T1–T8. Key design:
@@ -55,15 +73,24 @@ Implemented per rules T1–T8. Key design:
 - Timeout: calibrated `DeviceThresholds.inferenceTimeoutMs` (p95 + 20%, max 500 ms)
 - `pipelineMode` is **never read** by timeout logic (T5/D4)
 
+## Tiling
+
+Overlapping-tile inference with blended edges (D3):
+- Tile size 256×256, halo 17 px (DnCNN receptive field radius), blend 16 px
+- Separable 1D weighting (halo-drop + linear cross-fade)
+- Tiled output matches full-frame within 2.38e-7 max-abs-diff (float32 precision limit)
+- Peak tile working memory: 1.75 MB
+
 ## Status
 
 - [x] Module scaffold (build.gradle.kts, AndroidManifest.xml, source dirs)
 - [x] Contract objects (FusedFrame §6.3, DenoisedFrame §6.4)
-- [x] Discard-race timeout mechanism (DiscardRaceRunner + tests)
-- [x] Single-flight policy (DenoiseModule + tests)
+- [x] Discard-race timeout mechanism (DiscardRaceRunner + 14 tests)
+- [x] Single-flight policy (DenoiseModule + 4 tests)
+- [x] Tiling with blended edges (Tiler + 3 tests)
 - [x] Calibration API (InferenceApi for D6)
 - [x] PyTorch → LiteRT FP32 Conversion & Parity Gate (`convert_smoke.py`)
 - [ ] LiteRT inference integration (blocked on W1: trained checkpoint)
-- [ ] Tiling logic (D3 — needs model + memory measurements)
+- [ ] INT8 quantization (blocked on W1: trained checkpoint)
 - [ ] Results client (W1–W7 — separate task)
 - [ ] On-device benchmarks (needs Primary Device)

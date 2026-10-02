@@ -158,7 +158,7 @@ build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-tr
 | Alignment + confidence classifier | 2 | Not started |
 | Fusion (4-way) + post-process + demo UI | 3 | Phase 1 demo code in `fusion-postprocess-demo/` (strategies, tone mapping, sharpening, SSIM search — unit tested); on-device pipeline pending Role 2 |
 | Primary CNN training | 4 | Not started |
-| Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + Android module scaffold implemented. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference blocked by Role 4 checkpoint (2026-10-02) |
+| Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + tiling + calibration API + Android module scaffold — all Java. 21 unit tests passing. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference + INT8 quantization blocked by Role 4 checkpoint (2026-10-02) |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
 
 ## Open issues & architectural gaps (escalated to the orchestrator — do NOT silently fix)

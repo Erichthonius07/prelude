@@ -1,0 +1,7 @@
+# Normalize line endings across platforms.
+* text=auto
+# Shell scripts must survive Windows checkouts (CRLF breaks them on Unix).
+gradlew text eol=lf
+*.sh text eol=lf
+# Batch files need CRLF.
+*.bat text eol=crlf

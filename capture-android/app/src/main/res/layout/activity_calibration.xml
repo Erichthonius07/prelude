@@ -9,7 +9,7 @@
 
         <TextView android:text="Results Service base URL" android:layout_marginTop="16dp"
             android:layout_width="wrap_content" android:layout_height="wrap_content"/>
-        <EditText android:id="@+id/baseUrlInput" android:hint="http://<laptop-ip>:8080"
+        <EditText android:id="@+id/baseUrlInput" android:hint="http://&lt;laptop-ip&gt;:8080"
             android:inputType="textUri" android:layout_width="match_parent" android:layout_height="wrap_content"/>
         <Button android:id="@+id/saveUrlButton" android:text="Save base URL"
             android:layout_width="match_parent" android:layout_height="wrap_content"/>

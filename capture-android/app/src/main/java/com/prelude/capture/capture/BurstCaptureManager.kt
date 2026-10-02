@@ -7,12 +7,13 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.annotation.SuppressLint
 import android.util.Size
 import com.prelude.capture.model.YuvFrame
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCancellableCoroutine
 
 /**
  * Camera2 burst capture using real captureBurst() to minimize inter-frame gap
@@ -30,6 +31,10 @@ class BurstCaptureManager(private val context: Context) {
     private lateinit var bgThread: HandlerThread
     private lateinit var bgHandler: Handler
 
+    // CAMERA permission is enforced at both UI entry points that reach this call:
+    // MainActivity (capture button) and CalibrationActivity (runBlurCalibration focus sweep)
+    // each checkSelfPermission + request before constructing BurstCaptureManager.
+    @SuppressLint("MissingPermission")
     suspend fun open(): Size = suspendCancellableCoroutine { cont ->
         bgThread = HandlerThread("prelude-cam").also { it.start() }
         bgHandler = Handler(bgThread.looper)

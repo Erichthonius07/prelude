@@ -15,6 +15,27 @@ class ResultsServiceClient(private val baseUrl: String) {
 
     /** POST /api/v1/metrics/capture — real endpoint, not mocked. */
     fun submitCapture(runId: String, deviceId: String, appVersion: String, bursts: List<FrameBurst>): Boolean {
+        val req = Request.Builder()
+            .url("$baseUrl/api/v1/metrics/capture")
+            .post(buildEnvelope(runId, deviceId, appVersion, bursts).toString().toRequestBody(JSON))
+            .build()
+        return runCatching {
+            http.newCall(req).execute().use { it.isSuccessful }
+        }.getOrElse { false }
+    }
+
+    /**
+     * Wire shape per docs/data-contract.md §5.1 (capture stage) and the IngestionEnvelope DTO:
+     * bursts[].imageId carries the FrameBurst's burstId (§2.3); every frame row is per-frame
+     * (aggregate-only submissions are rejected, §2.2). Internal so unit tests can validate
+     * the exact payload against the contract.
+     */
+    internal fun buildEnvelope(
+        runId: String,
+        deviceId: String,
+        appVersion: String,
+        bursts: List<FrameBurst>,
+    ): JSONObject {
         val payload = JSONObject().put("bursts", JSONArray().apply {
             bursts.forEach { b ->
                 put(JSONObject()
@@ -33,20 +54,12 @@ class ResultsServiceClient(private val baseUrl: String) {
                     }))
             }
         })
-        val envelope = JSONObject()
+        return JSONObject()
             .put("submissionId", UUID.randomUUID().toString())
             .put("runId", runId)
             .put("deviceId", deviceId)
             .put("appVersion", appVersion)
             .put("occurredAt", Instant.now().toString())
             .put("payload", payload)
-
-        val req = Request.Builder()
-            .url("$baseUrl/api/v1/metrics/capture")
-            .post(envelope.toString().toRequestBody(JSON))
-            .build()
-        return runCatching {
-            http.newCall(req).execute().use { it.isSuccessful }
-        }.getOrElse { false }
     }
 }

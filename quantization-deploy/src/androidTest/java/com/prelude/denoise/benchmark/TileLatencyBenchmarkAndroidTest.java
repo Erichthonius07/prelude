@@ -96,9 +96,16 @@ public class TileLatencyBenchmarkAndroidTest {
         powerManager = (PowerManager) targetContext.getSystemService(Context.POWER_SERVICE);
         assertNotNull("PowerManager unavailable", powerManager);
 
+        // Foreground: run as the top app so the process is not frozen / cpuset-restricted.
+        android.app.Activity benchActivity = InstrumentationRegistry.getInstrumentation()
+            .startActivitySync(new android.content.Intent(targetContext,
+                TileLatencyBenchmarkActivity.class)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+
         // Thermal gate: refuse to start at MODERATE or above (rule D5).
         thermalStart = powerManager.getCurrentThermalStatus();
         if (thermalStart >= PowerManager.THERMAL_STATUS_MODERATE) {
+            benchActivity.finish();
             fail("Refusing to benchmark: device already at thermal status " + thermalStart
                 + " (>= MODERATE). Let it cool down and re-run. (rule D5)");
             return;
@@ -108,6 +115,7 @@ public class TileLatencyBenchmarkAndroidTest {
         boolean latencyOnly = modelPathArg == null || new File(modelPathArg.trim()).getName().contains("untrained");
 
         List<String> infoLines = new ArrayList<>();
+        int numThreads = intArg(args, "numThreads", LiteRtAdapterImpl.NUM_THREADS);
         LiteRtAdapter adapter = new LiteRtAdapterImpl(modelBuffer, new ErrorListener() {
             @Override
             public void onError(String msg, Throwable t) {
@@ -118,14 +126,14 @@ public class TileLatencyBenchmarkAndroidTest {
                 infoLines.add(msg);
                 Log.i(TAG, msg);
             }
-        });
+        }, numThreads);
 
         JSONObject json = new JSONObject();
         json.put("kind", "denoise-latency");
         json.put("latencyOnly", latencyOnly);
         json.put("model", modelPathArg == null ? DEFAULT_ASSET + " (asset, untrained)"
             : new File(modelPathArg.trim()).getName());
-        json.put("numThreads", LiteRtAdapterImpl.NUM_THREADS);
+        json.put("numThreads", numThreads);
         json.put("delegate", "XNNPACK requested");
         json.put("adapterInfoLines", new JSONArray(infoLines));
         json.put("deviceModel", Build.MODEL);
@@ -137,6 +145,7 @@ public class TileLatencyBenchmarkAndroidTest {
         json.put("args", new JSONObject()
             .put("measuredRuns", measuredRuns)
             .put("warmupRuns", warmupRuns)
+            .put("numThreads", numThreads)
             .put("imageSize", imageSizeArg == null ? JSONObject.NULL : imageSizeArg)
             .put("repeats", repeats)
             .put("cooldownMs", cooldownMs));
@@ -164,6 +173,7 @@ public class TileLatencyBenchmarkAndroidTest {
 
         File outFile = writeJson(targetContext, json);
         Log.i(TAG, "Latency JSON written to " + outFile.getAbsolutePath());
+        benchActivity.finish();
 
         assertTrue("Output JSON file must exist and be non-empty",
             outFile.exists() && outFile.length() > 0);

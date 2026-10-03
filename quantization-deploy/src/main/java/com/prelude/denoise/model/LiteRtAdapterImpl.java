@@ -11,17 +11,22 @@ public class LiteRtAdapterImpl implements LiteRtAdapter {
     public static final int NUM_THREADS = 4;
 
     public LiteRtAdapterImpl(ByteBuffer modelBuffer, ErrorListener errorListener) {
+        this(modelBuffer, errorListener, NUM_THREADS);
+    }
+
+    /** Overload with explicit thread count; NUM_THREADS stays the documented default. */
+    public LiteRtAdapterImpl(ByteBuffer modelBuffer, ErrorListener errorListener, int numThreads) {
         if (modelBuffer == null || !modelBuffer.isDirect()) {
             throw new IllegalArgumentException("Model buffer must be a direct ByteBuffer");
         }
         InterpreterApi.Options options = new InterpreterApi.Options();
         options.setUseXNNPACK(true);
-        options.setNumThreads(NUM_THREADS);
-        
+        options.setNumThreads(numThreads);
+
         this.interpreter = InterpreterApi.create(modelBuffer, options);
         if (errorListener != null) {
             errorListener.onInfo("XNNPACK requested");
-            errorListener.onInfo("numThreads=" + NUM_THREADS);
+            errorListener.onInfo("numThreads=" + numThreads);
         }
     }
     

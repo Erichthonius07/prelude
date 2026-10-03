@@ -2,4 +2,6 @@
 /.gradle
 outputs/
 *.tflite
+# A24 exception: the single final small INT8 model asset (Role 5a explicitly authorized this one file)
+!src/main/assets/dncnn_int8_srgb.tflite
 *.pth

@@ -39,7 +39,8 @@ src/main/java/com/prelude/denoise/
 src/test/java/com/prelude/denoise/    — 43 JVM tests (8 suites, rule X3)
 src/androidTest/java/com/prelude/denoise/
 ├── model/LiteRtAdapterImplAndroidTest.java — JNI load smoke (NOT RUN on device)
-└── benchmark/TileLatencyBenchmarkAndroidTest.java — tile latency harness (NOT RUN on device)
+├── benchmark/TileLatencyBenchmarkAndroidTest.java — tile latency harness (MEASURED on vivo V2318, see below)
+└── benchmark/TileLatencyBenchmarkActivity.java — foreground host activity for the harness
 ```
 
 ### Python scripts
@@ -47,8 +48,46 @@ src/androidTest/java/com/prelude/denoise/
 convert_smoke.py    — PyTorch → LiteRT FP32 conversion + parity gate
 quantize.py         — INT8 PTQ (currently a smoke test on synthetic sRGB)
 submit_metrics.py   — Submits metrics/latency to Results Service
-requirements.txt    — Python deps (ai-edge-torch, ai-edge-quantizer)
+evaluate.py         — Offline FP32-vs-INT8 quality evaluation (metrics JSON for submit_metrics.py)
+tiler_ref.py        — numpy reference of the Java Tiler (same tile/halo/blend/T9 semantics)
+requirements.txt    — Python deps (see dependency table above)
 ```
+
+## Offline quality evaluation (`evaluate.py`) — real-data run NOT RUN
+
+```
+python evaluate.py --fp32 <fp32.tflite> --int8 <int8.tflite> \
+    --pairs-dir <dir with input/ and ground_truth/> \
+    --input-domain srgb|linear --input-kind sidd-noisy|fused-frame \
+    --checkpoint-sha256 <64 hex> --dataset <name> --out <metrics.json> \
+    [--model-variant cnn-v1] [--smoke]
+```
+
+- Loads each model with `ai_edge_litert` (CPU), runs FULL images through
+  `tiler_ref.py` — a numpy reference of the Java Tiler validated against the
+  committed Java golden fixture (`test/golden_tiler_vector.txt`, cross-language
+  test `test_tiler_ref.test_golden_replay_against_java_fixture`, ≤ 1e-5; the
+  Java side is `TilerGoldenVectorTest`, fixture regeneration only via
+  `-Dtiler.golden.regenerate=true`).
+- Per image: skimage PSNR/SSIM vs ground truth for BOTH precisions
+  (`data_range=1.0`, `channel_axis=2`, outputs clamped to [0,1], rule Q4) plus
+  a separate `agreement_fp32_vs_int8` block.
+- Decoding is fixed by `--input-domain` (rule C3 — no conversion inside the
+  script): `srgb` 8-bit → /255 (SIDD convention); `linear` → `.npy` float32
+  passthrough or true 16-bit PNG /65535; 8-bit images with `linear` are
+  REFUSED (ambiguous encoding). 16-bit RGB PNG cannot be faithfully decoded by
+  Pillow → `.npy` is the supported linear container (open question OQ3).
+- Provenance: dataset, `input_domain`, `input_kind`, `checkpoint_sha256`,
+  computed SHA-256 of both `.tflite` files, file sizes, tool versions,
+  image ids, `smoke` flag. Refuses to run (before any model loads) on
+  unreadable images, missing pairs, or size mismatches. Latency is NOT
+  measured here (device-only, rule Q4).
+- Output feeds `submit_metrics.py --metrics-json` (tested offline with mocked
+  HTTP). JVM test count: 49 (TilerGoldenVectorTest added).
+
+**Real-data run: NOT RUN** — needs a real pairs directory and the final
+models. Synthetic-fixture unit tests pass (`python -m unittest`, 22 Python
+tests across tiler_ref/evaluate/submit_metrics).
 
 ## Dependencies
 
@@ -57,8 +96,16 @@ requirements.txt    — Python deps (ai-edge-torch, ai-edge-quantizer)
 | `com.google.ai.edge.litert:litert` | 2.1.5 | On-device LiteRT inference runtime | `capture-android/gradle/libs.versions.toml` | [Google Maven](https://maven.google.com/web/index.html#com.google.ai.edge.litert:litert) |
 | `androidx.test.ext:junit` | 1.1.5 | JUnit extensions for Android instrumented tests | `quantization-deploy/build.gradle.kts` | Google Maven |
 | `androidx.test:core` | 1.5.0 | Core Android test APIs | `quantization-deploy/build.gradle.kts` | Google Maven |
+| `androidx.test:runner` | 1.5.2 | `AndroidJUnitRunner` instrumentation class — was missing from the APK (device `ClassNotFoundException`, 2026-10-03); POM pairs with monitor 1.6.1 / storage 1.4.2 already on the classpath | `quantization-deploy/build.gradle.kts` | [Google Maven](https://maven.google.com/web/index.html#androidx.test:runner) |
 | `ai-edge-torch` (LiteRT Torch) | 0.7.2 | PyTorch to LiteRT FP32 conversion | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-torch/) |
 | `ai-edge-quantizer` | 0.4.1 | INT8 Post-Training Quantization (PTQ) | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-quantizer/) |
+| `scikit-image` | 0.26.0 | PSNR/SSIM metrics for offline evaluation (rule Q4: `data_range=1.0`, `channel_axis=2`) | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/scikit-image/) |
+
+Verified in the module venv (`pip freeze`, 2026-10-03): `scikit-image==0.26.0`,
+`numpy==2.5.3`, `pillow==12.3.0`, `ai-edge-litert==2.1.5`, `requests==2.34.2`.
+(Note: the local venv reports `torch==2.14.1` although `requirements.txt` pins
+`torch==2.12.1`, and `litert-torch==0.9.1` vs the pinned `ai-edge-torch==0.7.2` —
+pre-existing venv drift, flagged here for honesty; not touched by this change.)
 
 > **Note:** The `.tflite` and `.pth` files are ignored in `.gitignore`. The single final model file will be an exception in `.gitignore` (decision A24).
 
@@ -147,14 +194,37 @@ Overlapping-tile inference with blended edges (D3):
   overwritten by a later run. Proven by `TileBufferReuseTest` + an
   anti-aliasing test, with mutation checks pasted failing.
 
-## On-device latency benchmark — NOT RUN (rule H1/D5)
+## On-device latency benchmark — MEASURED (vivo V2318, Android 16, SM7550)
 
-`src/androidTest/.../benchmark/TileLatencyBenchmarkAndroidTest.java` measures
-inference latency through `LiteRtAdapterImpl` (NUM_THREADS=4, XNNPACK
-requested). It **compiles** (`./gradlew :quantization-deploy:assembleDebugAndroidTest`)
-but has **NOT been run on any device**. Run:
-`cd capture-android && ./gradlew :quantization-deploy:connectedDebugAndroidTest`
-then `adb pull` the JSON path printed in the log.
+`src/androidTest/.../benchmark/TileLatencyBenchmarkAndroidTest.java` runs as a
+**foreground** benchmark (it launches `TileLatencyBenchmarkActivity` with
+`FLAG_KEEP_SCREEN_ON`; verified `topResumedActivity` during runs). All runs:
+`numThreads=4`, XNNPACK requested, nearest-rank p95, thermal status recorded,
+X14 freezer validity check (no `am_app_frozen` events for the test package
+during the run window — see limitations below).
+
+**Final runs (2026-10-03, `outputs/device-runs/`):**
+
+| Model | Per-tile median / p95 / max (ms) | N | 1024×1024 uncapped (ms) | tiles | per-tile (ms, total/25) | throughDenoiseModule timeoutEvent |
+|---|---|---|---|---|---|---|
+| FP32 (untrained asset, latencyOnly=true) | 1869.4 / 1881.2 / 1882.1 | 30 | 45426.5 | 25 | 1817.1 | **true** |
+| INT8 (`dncnn_trained_int8.tflite`, provisional sRGB) | 414.4 / 435.5 / 442.2 | 100 | 9394.2 | 25 | 375.8 | **true** |
+
+Both models exceed the 500 ms ceiling per tile (`timeoutEvent=true` in the
+through-DenoiseModule phase). FP32 numbers are `latencyOnly=true` (untrained
+asset); INT8 comes from a real Role 4 checkpoint but is **PROVISIONAL**
+(sRGB domain, synthetic calibration — see provenance below). None of these are
+final results. Thread-count observation: `numThreads` 1/2/4/6 showed **no
+observable latency difference** and exactly one running thread in every
+sample (recorded observation; no root-cause claim). Earlier sweep JSONs are in
+`outputs/device-runs/` (`numthreads-*.json`, `fg-*.json`, smoke runs).
+
+**vivo freezer note (X14):** vivo's `fast_freezer` froze the instrumented test
+app ~10 s into background runs, making them invalid (wall clock includes the
+freeze). The working fix was whitelisting the test package:
+`adb shell dumpsys deviceidle whitelist +com.prelude.denoise.test`
+(revert with `-com.prelude.denoise.test`). Every reported run passed the
+validity check. Also: `svc power stayon usb` + foreground activity.
 
 Instrumentation arguments (all optional):
 - `measuredRuns` — single-tile measured runs, default **100**; `warmupRuns` —
@@ -181,11 +251,79 @@ there). Per the C4 amendment, every JSON carries `latencyOnly: true` for the
 untrained model: latency-timing evidence only, **never quality, never a final
 result**.
 
-- **MAC estimate (paper, to be replaced by the measurement):** DnCNN
+- **MAC estimate (paper — X15: an estimate, never a conclusion):** DnCNN
   (3→64→…→64→3, 17 conv layers of 3×3, `training/model.py`) ⇒ 556,416 MACs/pixel
-  ⇒ ~36.5 GMACs per 256×256 tile (36,465,266,688). At a typical 50–100 GMAC/s
-  phone-CPU rate that is ~0.4–0.7 s per tile — the 500 ms ceiling (T4) would be
-  exceeded on multi-tile images. **Estimate only; the device p95 decides.**
+  ⇒ ~36.5 GMACs per 256×256 tile. The measured numbers above supersede any
+  feasibility claim derived from this figure.
+
+## DenoiseService — entry point for Role 1 / Role 3
+
+```java
+ErrorListener listener = (msg, t) -> Log.w(TAG, msg, t);
+// Bundled provisional INT8 asset (see provenance below), or FileModelSource(path):
+DenoiseService service = new DenoiseService(
+    new AssetModelSource(getAssets(), "dncnn_int8_srgb.tflite"), listener);
+
+FusedFrame frame = ...;                 // §6.3 (from Role 3)
+FrameGeometry geom = new FrameGeometry(width, height, 3); // §6.3 gap workaround
+
+// Calibrated path (rule T4): timeout = min(p95*1.2, 500) from the device profile
+RaceResult result = service.denoise(frame, geom, timeoutMs, DenoiseModule.RunMode.LIVE);
+
+// Until calibrated — loud-logged 500 ms ceiling (dev/test only):
+RaceResult result = service.denoise(frame, geom, DenoiseModule.RunMode.LIVE);
+
+DenoisedFrame out = result.getFrame();          // hand to PostProcess
+boolean lateDropped = result.awaitLateInference(500); // before flushing wire rows (T3)
+...
+service.close();                                 // releases the interpreter
+```
+
+## Model provenance (bundled INT8 asset) — PROVISIONAL
+
+- Asset: `src/main/assets/dncnn_int8_srgb.tflite` (607,792 bytes,
+  SHA-256 `33b0452962bbf1be42d98f90261d5ed0c96bf0480db23951900006c7a98c7bdb`)
+  — committed under decision A24 (explicitly authorized, only this file).
+- Checkpoint: `training/dncnn_best_med.pth`
+  (SHA-256 `c664708b7e079433d71b27207a8fdc508ba6e7824fd5cdca94390229f0312c41`,
+  Role 4 commit `89e3ffe`, run `phase3-denoise-sidd-medium-l1`).
+- Converter / quantizer: `ai-edge-torch==0.7.2` / `ai-edge-quantizer==0.7.0`
+  (requirements.txt pins; the local venv reports `litert-torch==0.9.1` — drift
+  noted in the dependency table).
+- Input domain: **sRGB** (rule C3 mismatch with linear FusedFrame — see
+  limitations). INT8 calibration data: **synthetic images**
+  (`synthetic_srgb_smoke_test`, 100 samples) — stated plainly.
+- **PROVISIONAL: calibrated on synthetic images, sRGB domain.** Not a final
+  artifact. Re-quantization with real SIDD train/validation data (via the
+  leakage guard) is pending that data being available locally.
+
+## Quality evaluation — NOT DONE
+
+NOT DONE: no validation pairs available locally (`data/` is empty), so no
+PSNR/SSIM quality numbers exist for the current models. `evaluate.py` is ready
+and unit-tested (22 Python tests) for when pairs arrive. No quality number is
+reported anywhere.
+
+## Known limitations (observations, no root-cause claims)
+
+1. **FusedFrame size/layout gap** — §6.3 defines no width/height/layout;
+   callers must pass `FrameGeometry` alongside (draft notices to Role 1/3).
+2. **sRGB vs linear input** — bundled model is sRGB-domain; FusedFrame is
+   linear per §6.3. No conversion is performed anywhere (C3). Pending Role 4's
+   linear-domain checkpoint.
+3. **500 ms ceiling vs measured tile time** — measured per-tile medians
+   (FP32 1869.4 ms, INT8 414.4 ms) both exceed 500 ms; `timeoutEvent=true` on
+   every full-image run means fusion-only delivery would be the norm at
+   1024×1024. Ceiling discussion is a team-lead decision.
+4. **Thread count had no observable effect** — `numThreads` 1/2/4/6 showed no
+   latency difference and one running thread in every sample.
+5. **vivo freezer** — background instrumented runs were frozen by
+   `fast_freezer` ~10 s in (runs invalid); fixed by
+   `dumpsys deviceidle whitelist +com.prelude.denoise.test` + foreground
+   activity; X14 validity check after every device run.
+6. **Uncalibrated timeout** — no calibrated device profile exists; the 500 ms
+   ceiling default is loud-logged and must not be used for graded runs (T4).
+7. **Provisional model** — synthetic calibration, sRGB domain (above).
 
 ## Quantization results (smoke-test — sRGB domain)
 
@@ -200,7 +338,7 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 | FP32 vs INT8 worst PSNR | 34.36 dB |
 | FP32 model size | 2,250,552 bytes |
 | INT8 model size | 607,792 bytes (3.7× smaller) |
-| Latency | NOT RUN — needs Primary Device (rule D5) |
+| Latency | MEASURED on vivo V2318 (Android 16, SM7550), foreground harness — see benchmark section; latencyOnly / provisional |
 | Calibration data | 100 synthetic sRGB samples (final run: real SIDD train/val via leakage guard) |
 
 ## Status
@@ -217,17 +355,19 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 - [x] Calibration API (InferenceApi for D6)
 - [x] PyTorch → LiteRT FP32 Conversion & Parity Gate (`convert_smoke.py`)
 - [x] INT8 quantization — smoke-test (`quantize.py`, sRGB domain)
-- [x] LiteRT inference integration (HWC↔NCHW, lifecycle) — unit-tested; NOT RUN on a device
-- [x] Single-tile device latency harness + full-image mode with thermal
-      abort/args (androidTest compiles) — **NOT RUN on a device**
+- [x] LiteRT inference integration (HWC↔NCHW, lifecycle) — unit-tested; MEASURED on device (latencyOnly)
+- [x] Device latency harness (foreground activity, thermal abort, full-image mode) — MEASURED on vivo V2318: FP32 tile median 1869.4 ms / INT8 414.4 ms; 1024×1024 uncapped 45.4 s / 9.4 s; both exceed the 500 ms ceiling (2026-10-03)
 - [x] Results client (`submit_metrics.py`, 8 Python tests)
+- [x] Offline quality evaluation (`evaluate.py` + `tiler_ref.py`, 14 Python tests,
+      Java golden fixture cross-check; real-data run NOT RUN) — 2026-10-03
 - [ ] On-device benchmarks (needs Primary Device; p95 decides the 500 ms ceiling question)
 - [ ] Final quantization with real SIDD data (needs linear-domain checkpoint from Role 4)
 
-Current JVM test count: **48** across 8 suites
-(DenoiseModuleTest 5, DenoiseModuleTiledTest 7, InferenceApiTest 2,
-LiteRtInferenceRunnerTest 8, HwcChwConverterTest 2, TileBufferReuseTest 2,
-TilerTest 5, DiscardRaceRunnerTest 17) — run with
-`cd capture-android && ./gradlew :quantization-deploy:cleanTestDebugUnitTest :quantization-deploy:testDebugUnitTest`.
+JVM test count: **49** across 9 suites — 48 verified via
+`./gradlew :quantization-deploy:cleanTestDebugUnitTest :quantization-deploy:testDebugUnitTest`
+(2026-10-03); the added `TilerGoldenVectorTest` (1) is verified via plain
+`javac` + `JUnitCore` and awaits the next full Gradle run. Python tests:
+**22** (test_tiler_ref 6 incl. the Java golden replay, test_evaluate 8,
+test_submit_metrics 8) — run with `.venv/bin/python -m unittest`.
 
 Note: images smaller than one tile are zero-padded; edge pixels may differ from a same-size run; real frames are larger than a tile.

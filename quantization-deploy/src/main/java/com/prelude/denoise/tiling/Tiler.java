@@ -58,6 +58,19 @@ public final class Tiler {
      */
     public float[] process(float[] input, int width, int height, int channels,
                            Inferencer inferencer) {
+        return process(input, width, height, channels, inferencer, () -> false);
+    }
+
+    /**
+     * Tiled inference with cooperative abandon (rule T9): abandonFlag is checked
+     * BEFORE each tile; when it returns true the run stops between tiles and
+     * returns null (result dropped). A tile whose native call is already in
+     * flight always completes (T1: never interrupt a native call). Callers must
+     * treat a null return as "abandoned", never as output.
+     */
+    public float[] process(float[] input, int width, int height, int channels,
+                           Inferencer inferencer,
+                           java.util.function.BooleanSupplier abandonFlag) {
         float[] output = new float[width * height * channels];
         float[] weightSum = new float[width * height];
         float[] tileBuffer = new float[tileSize * tileSize * channels];
@@ -67,6 +80,11 @@ public final class Tiler {
 
         for (int ty = 0; ty <= tilesY; ty++) {
             for (int tx = 0; tx <= tilesX; tx++) {
+                // T9: cooperative abandon point — between tiles, never mid-tile.
+                if (abandonFlag.getAsBoolean()) {
+                    return null;
+                }
+
                 // Top-left coordinate of the tile in the full image
                 int startX = tx * stride;
                 int startY = ty * stride;

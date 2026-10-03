@@ -105,12 +105,15 @@ public final class DenoiseModule {
                               long timeoutMs, RunMode mode,
                               Tiler tiler, LiteRtAdapter adapter) {
         validateTimeoutMs(timeoutMs);
+        // T9: when the timer wins, the late tiled run stops at the next tile
+        // boundary (checked inside tiler.process), releasing the busy flag quickly.
+        AtomicBoolean abandonFlag = new AtomicBoolean(false);
         TileInferenceAdapter tileAdapter = new TileInferenceAdapter(
             adapter, tiler.getTileSize(), geometry.getChannels());
         InferenceRunner tiledRunner = frame -> tiler.process(
             frame.getImage(), geometry.getWidth(), geometry.getHeight(),
-            geometry.getChannels(), tileAdapter);
-        return denoiseUnderRace(input, timeoutMs, mode, tiledRunner);
+            geometry.getChannels(), tileAdapter, abandonFlag::get);
+        return denoiseUnderRace(input, timeoutMs, mode, tiledRunner, abandonFlag);
     }
 
     /**
@@ -120,6 +123,11 @@ public final class DenoiseModule {
      */
     private RaceResult denoiseUnderRace(FusedFrame input, long timeoutMs, RunMode mode,
                                         InferenceRunner raceRunner) {
+        return denoiseUnderRace(input, timeoutMs, mode, raceRunner, null);
+    }
+
+    private RaceResult denoiseUnderRace(FusedFrame input, long timeoutMs, RunMode mode,
+                                        InferenceRunner raceRunner, AtomicBoolean abandonFlag) {
         if (mode == RunMode.BENCHMARK) {
             RaceResult prev = lastRaceResult.get();
             if (prev != null) {
@@ -144,7 +152,7 @@ public final class DenoiseModule {
             DiscardRaceRunner race = new DiscardRaceRunner(raceRunner, timeSource, errorListener);
             RaceResult result = race.run(
                 input, timeoutMs, modelVariant, precision, mode,
-                () -> busyFlag.set(false)
+                () -> busyFlag.set(false), abandonFlag
             );
 
             lastRaceResult.set(result);

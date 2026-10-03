@@ -11,7 +11,9 @@ import com.prelude.denoise.tiling.Tiler;
 import org.junit.Test;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,14 +22,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
 
 /**
- * Whole-image tiled path under the discard-race (Task 1).
+ * Whole-image tiled path under the discard-race (Tasks 1 + 5).
  *
- * The tiled overload must run tiler.process as the InferenceRunner inside
+ * The tiled overload runs tiler.process as the InferenceRunner inside
  * DiscardRaceRunner, so the timeout (T4), the single-flight flag (T6/A26)
  * and the fallback semantics (T3/A7/A8) apply to the full image, not per tile.
+ * T9: after the timer wins, the late tiled run abandons cooperatively at the
+ * next tile boundary (never interrupting the tile in flight, T1).
  *
  * All timing is via FakeTimeSource (rule X5): the timer only fires when the
- * test releases it, and the slow adapter blocks on latches — no real sleeps.
+ * test releases it, and slow tiles block on per-call latches — no real sleeps.
  */
 public class DenoiseModuleTiledTest {
 
@@ -45,32 +49,39 @@ public class DenoiseModuleTiledTest {
     /**
      * Fake LiteRT tile adapter. Output is always input + 1 per element, so the
      * tests can tell "pixels came from the model" (in+1) from a fusion-only
-     * fallback (pixels unchanged). BLOCK parks the first tile on a latch so the
-     * whole tiler.process call is late; THROW makes inference fail.
+     * fallback (pixels unchanged).
+     *
+     * callGates.get(i) gates the i-th run() call (missing entry or null passes
+     * through) — this models per-tile latency precisely, which the abandon
+     * tests need: tile 1 completes, tile 2 would hang forever without T9.
+     * throwAfterGate makes a call throw after its gate (models the in-flight
+     * tile failing; a tile in flight cannot be abandoned, rule T1).
      */
     private static class FakeTileAdapter implements LiteRtAdapter {
-        enum Behavior { PLUS_ONE, BLOCK, THROW }
-
-        final CountDownLatch entered = new CountDownLatch(1);
-        final CountDownLatch proceed = new CountDownLatch(1);
+        volatile List<CountDownLatch> callGates = new ArrayList<>();
+        volatile boolean throwAfterGate = false;
         final AtomicInteger callCount = new AtomicInteger(0);
-        volatile Behavior behavior = Behavior.PLUS_ONE;
+        final CountDownLatch firstCallEntered = new CountDownLatch(1);
 
         @Override
         public void run(ByteBuffer in, ByteBuffer out) {
-            callCount.incrementAndGet();
-            entered.countDown();
-            Behavior b = behavior;
-            if (b == Behavior.THROW) {
-                throw new RuntimeException("tile inference exploded");
+            int callIndex = callCount.getAndIncrement();
+            if (callIndex == 0) {
+                firstCallEntered.countDown();
             }
-            if (b == Behavior.BLOCK) {
+            List<CountDownLatch> gates = callGates;
+            CountDownLatch gate =
+                gates != null && callIndex < gates.size() ? gates.get(callIndex) : null;
+            if (gate != null) {
                 try {
-                    proceed.await();
+                    gate.await();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
                 }
+            }
+            if (throwAfterGate) {
+                throw new RuntimeException("tile inference exploded");
             }
             FloatBuffer inF = in.asFloatBuffer();
             inF.rewind();
@@ -122,6 +133,14 @@ public class DenoiseModuleTiledTest {
             adapter);
     }
 
+    private static float maxAbsDiff(float[] a, float[] b) {
+        float maxDiff = 0f;
+        for (int i = 0; i < a.length; i++) {
+            maxDiff = Math.max(maxDiff, Math.abs(a[i] - b[i]));
+        }
+        return maxDiff;
+    }
+
     @Test
     public void tiledImageLargerThanOneTileFinishesInTime() {
         FakeTileAdapter adapter = new FakeTileAdapter();
@@ -147,18 +166,15 @@ public class DenoiseModuleTiledTest {
         assertEquals("Every tile must go through the adapter", EXPECTED_TILES, adapter.callCount.get());
 
         // Every delivered pixel must be model output (input+1), not a fallback copy.
-        float maxDiff = 0f;
-        for (int i = 0; i < image.length; i++) {
-            maxDiff = Math.max(maxDiff, Math.abs((image[i] + 1f) - out.getImage()[i]));
-        }
-        assertTrue("Output must equal model output (input+1), max diff " + maxDiff,
-            maxDiff <= 1e-4f);
+        assertEquals("Output must equal model output (input+1)",
+            0f, maxAbsDiff(image, out.getImage()) - 1f, 1e-4f);
     }
 
     @Test
     public void tiledTooSlowTimesOutFusionOnlyAndLateResultDiscarded() throws Exception {
         FakeTileAdapter adapter = new FakeTileAdapter();
-        adapter.behavior = FakeTileAdapter.Behavior.BLOCK;
+        CountDownLatch tile1Gate = new CountDownLatch(1);
+        adapter.callGates = Arrays.asList(tile1Gate);
         FakeTimeSource time = new FakeTimeSource();
         RecordingErrorListener listener = new RecordingErrorListener();
         DenoiseModule module = module(adapter, time, listener);
@@ -172,7 +188,7 @@ public class DenoiseModuleTiledTest {
             firstDone.countDown();
         }, "tiled-first-burst").start();
 
-        assertTrue("Tiled inference must have started", adapter.entered.await(5, TimeUnit.SECONDS));
+        assertTrue("Tiled inference must have started", adapter.firstCallEntered.await(5, TimeUnit.SECONDS));
         time.releaseSleep(); // timer fires -> timeout
         assertTrue("denoise must return when the timer wins", firstDone.await(5, TimeUnit.SECONDS));
 
@@ -189,24 +205,30 @@ public class DenoiseModuleTiledTest {
         assertTrue("Fallback frame must carry the fusion-only pixels unchanged",
             Arrays.equals(image, out.getImage()));
 
-        // Now let the late tiled inference finish: its result must be discarded, never delivered.
-        adapter.proceed.countDown();
-        assertTrue("Late inference must complete and be marked discarded",
+        // Let the in-flight tile finish: the late run abandons at the tile boundary (T9)
+        // and its (never-completed) result is discarded, never delivered.
+        tile1Gate.countDown();
+        assertTrue("Late run must end (abandoned) and be marked discarded",
             result.awaitLateInference(5000));
-        assertTrue("Timer won AND late result dropped => discardRaceEvent (T3/A7)",
+        assertTrue("Timer won AND late result dropped => discardRaceEvent (T3/T9)",
             result.isDiscardRaceOccurred());
 
         // Single-flight released from the late-inference thread: next burst runs normally (X4/T6).
-        RaceResult next = module.denoise(frame("burst-after", rampImage()),
+        adapter.callGates = new ArrayList<>();
+        float[] image2 = rampImage();
+        RaceResult next = module.denoise(frame("burst-after", image2),
             new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.LIVE);
         assertTrue("Next burst after timeout + late completion must run normally",
             next.isInferenceWon());
+        assertEquals("Next burst output must be model output (input+1)",
+            0f, maxAbsDiff(image2, next.getFrame().getImage()) - 1f, 1e-4f);
     }
 
     @Test
     public void tiledSecondBurstWhileLateTiledInferenceStillRunningGetsBusy() throws Exception {
         FakeTileAdapter adapter = new FakeTileAdapter();
-        adapter.behavior = FakeTileAdapter.Behavior.BLOCK;
+        CountDownLatch tile1Gate = new CountDownLatch(1);
+        adapter.callGates = Arrays.asList(tile1Gate);
         FakeTimeSource time = new FakeTimeSource();
         RecordingErrorListener listener = new RecordingErrorListener();
         DenoiseModule module = module(adapter, time, listener);
@@ -220,12 +242,12 @@ public class DenoiseModuleTiledTest {
             firstDone.countDown();
         }, "tiled-first-burst").start();
 
-        assertTrue(adapter.entered.await(5, TimeUnit.SECONDS));
+        assertTrue(adapter.firstCallEntered.await(5, TimeUnit.SECONDS));
         time.releaseSleep();
         assertTrue(firstDone.await(5, TimeUnit.SECONDS));
         assertTrue(firstRef.get().isTimerWon());
 
-        // Late tiled inference is still parked on the first tile: the flag is held.
+        // Late tiled inference is still parked inside tile 1: the flag is held.
         float[] image2 = new float[W * H * C];
         Arrays.fill(image2, 0.25f);
         RaceResult second = module.denoise(frame("burst-busy-2", image2),
@@ -241,15 +263,15 @@ public class DenoiseModuleTiledTest {
         assertTrue("BUSY fallback must carry its own frame's pixels unchanged",
             Arrays.equals(image2, secondFrame.getImage()));
 
-        // Cleanup: finish the late inference.
-        adapter.proceed.countDown();
+        // Cleanup: finish the in-flight tile; the late run abandons (T9).
+        tile1Gate.countDown();
         assertTrue(firstRef.get().awaitLateInference(5000));
     }
 
     @Test
     public void tiledInferenceExceptionDeliversFusionOnlyWithInferenceError() {
         FakeTileAdapter adapter = new FakeTileAdapter();
-        adapter.behavior = FakeTileAdapter.Behavior.THROW;
+        adapter.throwAfterGate = true;
         FakeTimeSource time = new FakeTimeSource();
         RecordingErrorListener listener = new RecordingErrorListener();
         DenoiseModule module = module(adapter, time, listener);
@@ -269,5 +291,138 @@ public class DenoiseModuleTiledTest {
         assertTrue("Fallback frame must carry the fusion-only pixels unchanged",
             Arrays.equals(image, out.getImage()));
         assertNotNull("The error must reach the ErrorListener", listener.lastError.get());
+    }
+
+    // ---- T9: cooperative abandon between tiles ----
+
+    @Test
+    public void tiledTimeoutAbandonsRemainingTilesAtTileBoundaryAndNextBurstRuns() throws Exception {
+        FakeTileAdapter adapter = new FakeTileAdapter();
+        CountDownLatch tile1Gate = new CountDownLatch(1);
+        adapter.callGates = Arrays.asList(tile1Gate);
+        FakeTimeSource time = new FakeTimeSource();
+        RecordingErrorListener listener = new RecordingErrorListener();
+        DenoiseModule module = module(adapter, time, listener);
+
+        float[] image = rampImage();
+        AtomicReference<RaceResult> firstRef = new AtomicReference<>();
+        CountDownLatch firstDone = new CountDownLatch(1);
+        new Thread(() -> {
+            firstRef.set(module.denoise(frame("burst-abandon", image),
+                new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.LIVE));
+            firstDone.countDown();
+        }, "tiled-first-burst").start();
+
+        assertTrue(adapter.firstCallEntered.await(5, TimeUnit.SECONDS));
+        time.releaseSleep(); // timer wins; abandon flag set
+        assertTrue(firstDone.await(5, TimeUnit.SECONDS));
+        assertTrue(firstRef.get().isTimerWon());
+
+        // Finish the in-flight tile: the late run must stop BEFORE tile 2 (T9),
+        // so exactly 1 adapter call happened for this burst — never 4.
+        tile1Gate.countDown();
+        assertTrue("Late run must end (abandoned)", firstRef.get().awaitLateInference(5000));
+        assertEquals("Remaining tiles must NOT be processed after the timer won (T9)",
+            1, adapter.callCount.get());
+        assertTrue("Abandoned late run => discardRaceOccurred (T3/T9)",
+            firstRef.get().isDiscardRaceOccurred());
+
+        // Busy flag was released by the (abandoned) late run: next burst runs normally.
+        adapter.callGates = new ArrayList<>();
+        float[] image2 = rampImage();
+        RaceResult next = module.denoise(frame("burst-after-abandon", image2),
+            new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.LIVE);
+        assertTrue("Next burst after an abandoned late run must run normally",
+            next.isInferenceWon());
+        assertEquals("Next burst output must be model output (input+1)",
+            0f, maxAbsDiff(image2, next.getFrame().getImage()) - 1f, 1e-4f);
+    }
+
+    @Test
+    public void tiledBenchmarkWaitReturnsQuicklyBecauseLateRunAbandons() throws Exception {
+        FakeTileAdapter adapter = new FakeTileAdapter();
+        CountDownLatch tile1Gate = new CountDownLatch(1);
+        CountDownLatch tile2Gate = new CountDownLatch(1); // never released: without T9 the
+        adapter.callGates = Arrays.asList(tile1Gate, tile2Gate); // late run would hang here
+        FakeTimeSource time = new FakeTimeSource();
+        RecordingErrorListener listener = new RecordingErrorListener();
+        DenoiseModule module = module(adapter, time, listener);
+
+        float[] image = rampImage();
+        AtomicReference<RaceResult> firstRef = new AtomicReference<>();
+        CountDownLatch firstDone = new CountDownLatch(1);
+        new Thread(() -> {
+            firstRef.set(module.denoise(frame("burst-bench-1", image),
+                new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.BENCHMARK));
+            firstDone.countDown();
+        }, "tiled-first-burst").start();
+
+        assertTrue(adapter.firstCallEntered.await(5, TimeUnit.SECONDS));
+        time.releaseSleep(); // timer wins
+        assertTrue(firstDone.await(5, TimeUnit.SECONDS));
+        assertTrue(firstRef.get().isTimerWon());
+
+        // Finish the in-flight tile; without T9 the late run would park on tile2Gate
+        // forever and the BENCHMARK-mode bounded wait below would stall on it.
+        tile1Gate.countDown();
+        assertTrue(firstRef.get().awaitLateInference(5000));
+        assertEquals("Late run abandoned after the in-flight tile (T9)", 1, adapter.callCount.get());
+
+        // The BENCHMARK wait for the previous burst must return immediately now.
+        adapter.callGates = new ArrayList<>();
+        float[] image2 = rampImage();
+        AtomicReference<RaceResult> secondRef = new AtomicReference<>();
+        CountDownLatch secondDone = new CountDownLatch(1);
+        new Thread(() -> {
+            secondRef.set(module.denoise(frame("burst-bench-2", image2),
+                new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.BENCHMARK));
+            secondDone.countDown();
+        }, "tiled-second-burst").start();
+        assertTrue("BENCHMARK wait must return quickly once the late run has ended (T9/T6)",
+            secondDone.await(5, TimeUnit.SECONDS));
+        assertTrue("Second BENCHMARK burst must run normally", secondRef.get().isInferenceWon());
+    }
+
+    @Test
+    public void tiledLateRunThrowsAfterTimerWonBusyStillReleased() throws Exception {
+        FakeTileAdapter adapter = new FakeTileAdapter();
+        CountDownLatch tile1Gate = new CountDownLatch(1);
+        adapter.callGates = Arrays.asList(tile1Gate);
+        adapter.throwAfterGate = true; // the in-flight tile fails after the timer already won
+        FakeTimeSource time = new FakeTimeSource();
+        RecordingErrorListener listener = new RecordingErrorListener();
+        DenoiseModule module = module(adapter, time, listener);
+
+        float[] image = rampImage();
+        AtomicReference<RaceResult> firstRef = new AtomicReference<>();
+        CountDownLatch firstDone = new CountDownLatch(1);
+        new Thread(() -> {
+            firstRef.set(module.denoise(frame("burst-late-throw", image),
+                new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.LIVE));
+            firstDone.countDown();
+        }, "tiled-first-burst").start();
+
+        assertTrue(adapter.firstCallEntered.await(5, TimeUnit.SECONDS));
+        time.releaseSleep(); // timer wins while tile 1 is in flight
+        assertTrue(firstDone.await(5, TimeUnit.SECONDS));
+        assertTrue(firstRef.get().isTimerWon());
+
+        // The in-flight tile cannot be abandoned (T1); it finishes its gate and throws.
+        // The late run ends exceptionally; its (nonexistent) result is dropped, the
+        // busy flag is still released, and the next burst must run normally.
+        tile1Gate.countDown();
+        firstRef.get().awaitLateInference(5000);
+        assertEquals("Late run ended on the in-flight tile (throw); abandon preempts tile 2",
+            1, adapter.callCount.get());
+
+        adapter.callGates = new ArrayList<>();
+        adapter.throwAfterGate = false;
+        float[] image2 = rampImage();
+        RaceResult next = module.denoise(frame("burst-after-throw", image2),
+            new FrameGeometry(W, H, C), TIMEOUT_MS, DenoiseModule.RunMode.LIVE);
+        assertTrue("Busy flag must be released even when the late run throws (finally-release)",
+            next.isInferenceWon());
+        assertEquals("Next burst output must be model output (input+1)",
+            0f, maxAbsDiff(image2, next.getFrame().getImage()) - 1f, 1e-4f);
     }
 }

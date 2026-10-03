@@ -333,4 +333,36 @@ public class DiscardRaceRunnerTest {
             result.getFrame().getLatencyNs() / 1_000_000.0,
             result.getFrame().getLatencyMs(), 0.001);
     }
+
+    // ---- T9 guard: a null result is only legitimate AFTER the timer won ----
+
+    @Test
+    public void nullResultWhilePendingTreatedAsInferenceErrorInLiveMode() {
+        FakeInferenceRunner nullRunner = new FakeInferenceRunner((float[]) null);
+        AtomicReference<String> lastError = new AtomicReference<>();
+        DiscardRaceRunner runner = new DiscardRaceRunner(nullRunner, SystemTimeSource.INSTANCE,
+            (msg, t) -> lastError.set(msg));
+
+        RaceResult result = runner.run(testInput, 200, "cnn-v1", "fp32",
+            com.prelude.denoise.DenoiseModule.RunMode.LIVE);
+
+        assertEquals("Null while PENDING must surface as INFERENCE_ERROR (bug, not abandon)",
+            RaceResult.REASON_INFERENCE_ERROR, result.getFallbackReason());
+        assertTrue("Fallback frame marks fusion-only pixels (A8)", result.getFrame().isTimeoutOccurred());
+        assertFalse(result.isInferenceWon());
+        assertFalse(result.isDiscardRaceOccurred());
+        assertNotNull("Bug must reach the ErrorListener", lastError.get());
+    }
+
+    @Test
+    public void nullResultWhilePendingThrowsInBenchmarkMode() {
+        FakeInferenceRunner nullRunner = new FakeInferenceRunner((float[]) null);
+        DiscardRaceRunner runner = new DiscardRaceRunner(nullRunner, SystemTimeSource.INSTANCE, (msg, t) -> {});
+        try {
+            runner.run(testInput, 200, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.BENCHMARK);
+            fail("Null while PENDING must throw in BENCHMARK mode");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("PENDING"));
+        }
+    }
 }

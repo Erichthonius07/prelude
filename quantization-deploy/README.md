@@ -120,9 +120,17 @@ Implemented per rules T1–T8. Key design:
   delivered frame is fusion-only with `latencyNs` = time-to-deliver while the
   late tiled result is discarded. This overload returns `RaceResult` (like the
   non-tiled one) so callers can `awaitLateInference()` before flushing wire
-  rows (T3). Covered by `DenoiseModuleTiledTest` (4 tests) with mutation
+  rows (T3). Covered by `DenoiseModuleTiledTest` (7 tests) with mutation
   checks pasted failing (race wrapper removed → 4 failures; timeoutMs ignored
-  → latency assertion fails).
+  → latency assertion fails; abandon check removed / flag not set → tile-count
+  failures; busy flag cleared early → BUSY assertion fails).
+- **T9 cooperative abandon (2026-10-03)**: after the timer wins, the late
+  tiled run checks an abandon flag BEFORE each tile and stops at the next tile
+  boundary (the tile in flight always completes — T1). The busy flag is
+  released by the late run's end (finished, abandoned, or thrown), so
+  `discardRaceEvent` becomes final quickly and the interpreter frees early. A
+  null result while the race is still PENDING is treated as a bug
+  (`INFERENCE_ERROR`), never as an abandon.
 
 ## Tiling
 
@@ -142,21 +150,37 @@ Overlapping-tile inference with blended edges (D3):
 ## On-device latency benchmark — NOT RUN (rule H1/D5)
 
 `src/androidTest/.../benchmark/TileLatencyBenchmarkAndroidTest.java` measures
-single-tile (256×256) inference latency through `LiteRtAdapterImpl`
-(NUM_THREADS=4, XNNPACK requested). Protocol: 5 warm-up runs excluded (count
-recorded), 20 measured runs, 100 ms spacing, nearest-rank p95 as fractional
-ms; thermal status (`PowerManager`) before/after each phase; `Build.MODEL`,
-Android version, SoC (`Build.SOC_MODEL`); everything written to a local JSON in
-the app's files dir. It **compiles** (`./gradlew :quantization-deploy:assembleDebugAndroidTest`)
+inference latency through `LiteRtAdapterImpl` (NUM_THREADS=4, XNNPACK
+requested). It **compiles** (`./gradlew :quantization-deploy:assembleDebugAndroidTest`)
 but has **NOT been run on any device**. Run:
 `cd capture-android && ./gradlew :quantization-deploy:connectedDebugAndroidTest`
-then `adb pull` the path printed in the log.
+then `adb pull` the JSON path printed in the log.
 
-- Default model: bundled asset `src/androidTest/assets/dncnn-untrained-smoke.tflite`
-  (**gitignored** — a fresh clone must re-run `convert_smoke.py` and copy it there).
-  Untrained weights ⇒ numbers are wiring-only evidence (`harnessOnly: true` in
-  the JSON), never reportable results (rule C4). Override with a real
-  checkpoint via `-Pandroid.testInstrumentationRunnerArguments.modelPath=<device path>`.
+Instrumentation arguments (all optional):
+- `measuredRuns` — single-tile measured runs, default **100**; `warmupRuns` —
+  excluded warm-up runs (count recorded), default **5**; 100 ms spacing.
+- `imageSize=<w>x<h>` — ALSO benchmark a full tiled denoise of that size:
+  per repeat it records BOTH `uncapped` (tiler.process directly with the real
+  adapter, no race, no timeout: total ms, tile count, per-tile native ms) AND
+  `throughDenoiseModule` (BENCHMARK mode, 500 ms ceiling: `timeoutEvent` is the
+  feasibility signal). `repeats` default **3** with a `cooldownMs` (default
+  2000) cool-down between repeats.
+- `modelPath` — absolute device path to a real checkpoint.
+
+Thermal policy (D5): **refuses to start** at `THERMAL_STATUS_MODERATE` or
+above; **aborts the phase and writes partial results** (`aborted`, partial
+raws, partial p95) if MODERATE is reached mid-run (in the uncapped phase via
+the T9 abandon flag between tiles); status recorded before, every 10 measured
+runs, and after each phase; `thermalRose=true` if any reading exceeded the
+starting status.
+
+Nearest-rank p95 (fractional ms) over the completed runs. Model default: the
+bundled asset `src/androidTest/assets/dncnn-untrained-smoke.tflite`
+(**gitignored** — a fresh clone must re-run `convert_smoke.py` and copy it
+there). Per the C4 amendment, every JSON carries `latencyOnly: true` for the
+untrained model: latency-timing evidence only, **never quality, never a final
+result**.
+
 - **MAC estimate (paper, to be replaced by the measurement):** DnCNN
   (3→64→…→64→3, 17 conv layers of 3×3, `training/model.py`) ⇒ 556,416 MACs/pixel
   ⇒ ~36.5 GMACs per 256×256 tile (36,465,266,688). At a typical 50–100 GMAC/s
@@ -185,22 +209,25 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 - [x] Contract objects (FusedFrame §6.3, DenoisedFrame §6.4)
 - [x] Discard-race timeout mechanism (DiscardRaceRunner + 15 tests)
 - [x] Single-flight policy (DenoiseModule + 5 tests)
-- [x] Tiled full-image path under the discard-race timeout (DenoiseModuleTiledTest, 4 tests + mutation checks) — 2026-10-03
+- [x] Tiled full-image path under the discard-race timeout, incl. T9
+      cooperative abandon between tiles (DenoiseModuleTiledTest, 7 tests +
+      mutation checks) — 2026-10-03
 - [x] Tiling with blended edges (Tiler + 5 tests)
 - [x] Per-tile buffer reuse (TileBufferReuseTest + aliasing test, mutation checks) — 2026-10-03
 - [x] Calibration API (InferenceApi for D6)
 - [x] PyTorch → LiteRT FP32 Conversion & Parity Gate (`convert_smoke.py`)
 - [x] INT8 quantization — smoke-test (`quantize.py`, sRGB domain)
 - [x] LiteRT inference integration (HWC↔NCHW, lifecycle) — unit-tested; NOT RUN on a device
-- [x] Single-tile device latency harness (androidTest compiles) — **NOT RUN on a device**
+- [x] Single-tile device latency harness + full-image mode with thermal
+      abort/args (androidTest compiles) — **NOT RUN on a device**
 - [x] Results client (`submit_metrics.py`, 8 Python tests)
 - [ ] On-device benchmarks (needs Primary Device; p95 decides the 500 ms ceiling question)
 - [ ] Final quantization with real SIDD data (needs linear-domain checkpoint from Role 4)
 
-Current JVM test count: **43** across 8 suites
-(DenoiseModuleTest 5, DenoiseModuleTiledTest 4, InferenceApiTest 2,
+Current JVM test count: **48** across 8 suites
+(DenoiseModuleTest 5, DenoiseModuleTiledTest 7, InferenceApiTest 2,
 LiteRtInferenceRunnerTest 8, HwcChwConverterTest 2, TileBufferReuseTest 2,
-TilerTest 5, DiscardRaceRunnerTest 15) — run with
+TilerTest 5, DiscardRaceRunnerTest 17) — run with
 `cd capture-android && ./gradlew :quantization-deploy:cleanTestDebugUnitTest :quantization-deploy:testDebugUnitTest`.
 
 Note: images smaller than one tile are zero-padded; edge pixels may differ from a same-size run; real frames are larger than a tile.

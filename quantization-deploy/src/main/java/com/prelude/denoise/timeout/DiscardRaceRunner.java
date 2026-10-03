@@ -4,6 +4,7 @@ import com.prelude.denoise.model.DenoisedFrame;
 import com.prelude.denoise.model.FusedFrame;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -35,11 +36,23 @@ public final class DiscardRaceRunner {
 
     public RaceResult run(FusedFrame input, long timeoutMs, String modelVariant, String precision,
                           com.prelude.denoise.DenoiseModule.RunMode mode) {
-        return run(input, timeoutMs, modelVariant, precision, mode, null);
+        return run(input, timeoutMs, modelVariant, precision, mode, null, null);
     }
 
     public RaceResult run(FusedFrame input, long timeoutMs, String modelVariant, String precision,
                           com.prelude.denoise.DenoiseModule.RunMode mode, Runnable onLateInferenceComplete) {
+        return run(input, timeoutMs, modelVariant, precision, mode, onLateInferenceComplete, null);
+    }
+
+    /**
+     * @param abandonFlag rule T9: set to true by the timer thread when it wins;
+     *        a tiled late run checks it between tiles and stops cooperatively
+     *        (its InferenceRunner then returns null). Null = no abandon support
+     *        (non-tiled runners).
+     */
+    public RaceResult run(FusedFrame input, long timeoutMs, String modelVariant, String precision,
+                          com.prelude.denoise.DenoiseModule.RunMode mode, Runnable onLateInferenceComplete,
+                          AtomicBoolean abandonFlag) {
         if (timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
             throw new IllegalArgumentException("Timeout must be 1.." + MAX_TIMEOUT_MS + " ms (rule T4, ceiling enforced)");
         }
@@ -59,7 +72,26 @@ public final class DiscardRaceRunner {
                 float[] pixels = inferenceRunner.run(input);
                 long elapsedNs = timeSource.nanoTime() - raceStartNs;
 
-                if (state.compareAndSet(RaceState.PENDING, RaceState.INFERENCE_WON)) {
+                if (pixels == null && state.compareAndSet(RaceState.PENDING, RaceState.FAILED)) {
+                    // A null result is only legitimate AFTER the timer won (T9 abandon).
+                    // Null while the race is still PENDING is a bug -> inference error.
+                    if (mode == com.prelude.denoise.DenoiseModule.RunMode.BENCHMARK) {
+                        errorRef.set(new IllegalStateException(
+                            "Inference returned null while the race was PENDING (bug)"));
+                    } else {
+                        if (errorListener != null) {
+                            errorListener.onError(
+                                "Inference returned null while the race was PENDING (bug)", null);
+                        }
+                        long nullElapsedNs = timeSource.nanoTime() - raceStartNs;
+                        frameRef.set(new DenoisedFrame(
+                            input.getBurstId(), Arrays.copyOf(input.getImage(), input.getImage().length),
+                            modelVariant, precision, nullElapsedNs, false, true
+                        ));
+                        fallbackReasonRef.set(RaceResult.REASON_INFERENCE_ERROR);
+                    }
+                    latch.countDown();
+                } else if (pixels != null && state.compareAndSet(RaceState.PENDING, RaceState.INFERENCE_WON)) {
                     frameRef.set(new DenoisedFrame(
                         input.getBurstId(), pixels, modelVariant, precision,
                         elapsedNs, false, false
@@ -68,6 +100,8 @@ public final class DiscardRaceRunner {
                     if (t != null) t.interrupt();
                     latch.countDown();
                 } else {
+                    // Late completion: the run was abandoned between tiles (T9, null)
+                    // or finished/failed after the timer had already won. Result is dropped.
                     state.compareAndSet(RaceState.TIMER_WON, RaceState.DISCARDED);
                     if (onLateInferenceComplete != null) onLateInferenceComplete.run();
                 }
@@ -103,6 +137,10 @@ public final class DiscardRaceRunner {
             }
 
             if (state.compareAndSet(RaceState.PENDING, RaceState.TIMER_WON)) {
+                // T9: tell the late tiled run to stop at the next tile boundary.
+                if (abandonFlag != null) {
+                    abandonFlag.set(true);
+                }
                 long elapsedNs = timeSource.nanoTime() - raceStartNs;
                 frameRef.set(new DenoisedFrame(
                     input.getBurstId(), Arrays.copyOf(input.getImage(), input.getImage().length),

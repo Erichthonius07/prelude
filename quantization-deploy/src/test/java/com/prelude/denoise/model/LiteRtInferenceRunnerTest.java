@@ -2,6 +2,7 @@ package com.prelude.denoise.model;
 
 import com.prelude.denoise.DenoiseModule;
 import com.prelude.denoise.timeout.ErrorListener;
+import com.prelude.denoise.timeout.RaceResult;
 import com.prelude.denoise.timeout.SystemTimeSource;
 import com.prelude.denoise.tiling.Tiler;
 import com.prelude.denoise.tiling.TileInferenceAdapter;
@@ -180,6 +181,38 @@ public class LiteRtInferenceRunnerTest {
     }
 
     /**
+     * Task 2 companion property: the runner reuses its internal scratch arrays,
+     * but the RETURNED array must still be fresh per call — it escapes into the
+     * delivered DenoisedFrame, so a later run must never alias or overwrite it.
+     */
+    @Test
+    public void testRunReturnsAFreshArrayEachCallAndNeverAliasesPreviousOutput() {
+        int w = 2, h = 2, c = 1;
+        LiteRtAdapter echo = new LiteRtAdapter() {
+            @Override
+            public void run(ByteBuffer in, ByteBuffer out) {
+                in.rewind();
+                out.clear();
+                out.put(in);
+            }
+            @Override
+            public void close() {
+            }
+        };
+        LiteRtInferenceRunner runner = new LiteRtInferenceRunner(echo, null, w, h, c);
+
+        float[] in1 = {1f, 2f, 3f, 4f};
+        float[] in2 = {5f, 6f, 7f, 8f};
+        float[] out1 = runner.run(new FusedFrame("b", "s1", in1, "fusion_multi"));
+        float[] out2 = runner.run(new FusedFrame("b", "s1", in2, "fusion_multi"));
+
+        assertNotSame("Returned array must be fresh per call (it escapes into DenoisedFrame)",
+            out1, out2);
+        assertArrayEquals("Earlier output must be untouched by the second run", in1, out1, 1e-6f);
+        assertArrayEquals(in2, out2, 1e-6f);
+    }
+
+    /**
      * Full path: FusedFrame → Tiler → HWC→NCHW → adapter → NCHW→HWC → DenoisedFrame.
      * Uses a 300x280 image (larger than one tile at tileSize=256).
      * The fake adapter passes through the data unchanged (identity model).
@@ -225,10 +258,11 @@ public class LiteRtInferenceRunnerTest {
             tiler,
             passthrough);
 
-        DenoisedFrame result = module.denoise(input, geom, 500, DenoiseModule.RunMode.LIVE);
+        RaceResult result = module.denoise(input, geom, 500, DenoiseModule.RunMode.LIVE);
+        DenoisedFrame frame = result.getFrame();
 
         // Check non-trivial output
-        float[] out = result.getImage();
+        float[] out = frame.getImage();
         assertEquals(w * h * c, out.length);
         assertFalse("Output must not be all zeros", allEqual(out, 0f));
         assertFalse("Output must not be all same", allEqual(out, out[0]));
@@ -241,8 +275,9 @@ public class LiteRtInferenceRunnerTest {
         }
         // Tiling with blending introduces small numerical differences
         assertTrue("Max diff " + maxDiff + " exceeds tolerance", maxDiff < 0.01f);
-        assertTrue("Latency must be > 0", result.getLatencyNs() > 0);
-        assertEquals("burst-tiled", result.getBurstId());
+        assertTrue("Latency must be > 0", frame.getLatencyNs() > 0);
+        assertEquals("burst-tiled", frame.getBurstId());
+        assertTrue("Inference must win when the model is fast", result.isInferenceWon());
     }
 
     /**

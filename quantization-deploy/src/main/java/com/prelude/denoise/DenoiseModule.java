@@ -5,6 +5,7 @@ import com.prelude.denoise.model.FusedFrame;
 import com.prelude.denoise.model.FrameGeometry;
 import com.prelude.denoise.model.LiteRtAdapter;
 import com.prelude.denoise.timeout.DiscardRaceRunner;
+import com.prelude.denoise.timeout.ErrorListener;
 import com.prelude.denoise.timeout.InferenceRunner;
 import com.prelude.denoise.timeout.RaceResult;
 import com.prelude.denoise.timeout.SystemTimeSource;
@@ -22,6 +23,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *   - Run inference with the discard-race timeout (T1–T8)
  *   - Enforce single-flight policy (A26/T6)
  *   - Expose latency measurement API for calibration (D6)
+ *
+ * Both the non-tiled path and the whole-image tiled path run as an
+ * InferenceRunner under DiscardRaceRunner, so the timeout (T4, ceiling 500 ms),
+ * the single-flight flag (T6) and the fallback semantics (T3/A7/A8) cover both.
+ * On a timer win the delivered frame is fusion-only, latencyNs is the
+ * time-to-deliver, and the late inference result is discarded, never delivered.
  *
  * This class does NOT read or use FusedFrame.pipelineMode (rules D4/T5).
  *
@@ -43,28 +50,28 @@ public final class DenoiseModule {
     private final TimeSource timeSource;
     private final String modelVariant;
     private final String precision;
+    private final ErrorListener errorListener;
 
     private final AtomicBoolean busyFlag = new AtomicBoolean(false);
     private final AtomicReference<RaceResult> lastRaceResult = new AtomicReference<>();
-    private final DiscardRaceRunner runner;
 
     private final Tiler tiler;
     private final LiteRtAdapter adapter;
 
     public DenoiseModule(InferenceRunner inferenceRunner, TimeSource timeSource,
-                         String modelVariant, String precision, com.prelude.denoise.timeout.ErrorListener errorListener,
+                         String modelVariant, String precision, ErrorListener errorListener,
                          Tiler tiler, LiteRtAdapter adapter) {
         this.inferenceRunner = inferenceRunner;
         this.timeSource = timeSource;
         this.modelVariant = modelVariant;
         this.precision = precision;
-        this.runner = new DiscardRaceRunner(inferenceRunner, timeSource, errorListener);
+        this.errorListener = errorListener;
         this.tiler = tiler;
         this.adapter = adapter;
     }
 
     public DenoiseModule(InferenceRunner inferenceRunner, TimeSource timeSource,
-                         String modelVariant, String precision, com.prelude.denoise.timeout.ErrorListener errorListener) {
+                         String modelVariant, String precision, ErrorListener errorListener) {
         this(inferenceRunner, timeSource, modelVariant, precision, errorListener, null, null);
     }
 
@@ -72,12 +79,47 @@ public final class DenoiseModule {
         this(inferenceRunner, SystemTimeSource.INSTANCE, modelVariant, PRECISION_FP32, null);
     }
 
+    /** Non-tiled whole-frame inference under the discard-race. */
     public RaceResult denoise(FusedFrame input, long timeoutMs, RunMode mode) {
-        if (timeoutMs < 1 || timeoutMs > DiscardRaceRunner.MAX_TIMEOUT_MS) {
-            throw new IllegalArgumentException(
-                "Timeout must be 1.." + DiscardRaceRunner.MAX_TIMEOUT_MS + " ms (rule T4)");
-        }
+        validateTimeoutMs(timeoutMs);
+        return denoiseUnderRace(input, timeoutMs, mode, inferenceRunner);
+    }
 
+    /**
+     * Denoise with explicit geometry (contract gap: FusedFrame has no width/height).
+     * The whole-image tiled inference runs as the InferenceRunner under the same
+     * discard-race and single-flight core as the non-tiled path.
+     */
+    public RaceResult denoise(FusedFrame input, FrameGeometry geometry,
+                              long timeoutMs, RunMode mode) {
+        if (this.tiler == null || this.adapter == null) {
+            throw new IllegalStateException("Tiler and LiteRtAdapter must be configured in constructor to use this overload");
+        }
+        return denoise(input, geometry, timeoutMs, mode, this.tiler, this.adapter);
+    }
+
+    /**
+     * Denoise with explicit geometry and custom Tiler/LiteRtAdapter.
+     */
+    public RaceResult denoise(FusedFrame input, FrameGeometry geometry,
+                              long timeoutMs, RunMode mode,
+                              Tiler tiler, LiteRtAdapter adapter) {
+        validateTimeoutMs(timeoutMs);
+        TileInferenceAdapter tileAdapter = new TileInferenceAdapter(
+            adapter, tiler.getTileSize(), geometry.getChannels());
+        InferenceRunner tiledRunner = frame -> tiler.process(
+            frame.getImage(), geometry.getWidth(), geometry.getHeight(),
+            geometry.getChannels(), tileAdapter);
+        return denoiseUnderRace(input, timeoutMs, mode, tiledRunner);
+    }
+
+    /**
+     * Shared core: single-flight (T6/A26) + discard-race (T1–T3).
+     * Identical semantics for the non-tiled and the tiled path; the only
+     * difference is which InferenceRunner races against the timer.
+     */
+    private RaceResult denoiseUnderRace(FusedFrame input, long timeoutMs, RunMode mode,
+                                        InferenceRunner raceRunner) {
         if (mode == RunMode.BENCHMARK) {
             RaceResult prev = lastRaceResult.get();
             if (prev != null) {
@@ -99,7 +141,8 @@ public final class DenoiseModule {
         }
 
         try {
-            RaceResult result = runner.run(
+            DiscardRaceRunner race = new DiscardRaceRunner(raceRunner, timeSource, errorListener);
+            RaceResult result = race.run(
                 input, timeoutMs, modelVariant, precision, mode,
                 () -> busyFlag.set(false)
             );
@@ -117,40 +160,10 @@ public final class DenoiseModule {
         }
     }
 
-    /**
-     * Denoise with explicit geometry (contract gap: FusedFrame has no width/height).
-     * Uses configured Tiler and LiteRtAdapter.
-     */
-    public DenoisedFrame denoise(FusedFrame input, FrameGeometry geometry,
-                                 long timeoutMs, RunMode mode) {
-        if (this.tiler == null || this.adapter == null) {
-            throw new IllegalStateException("Tiler and LiteRtAdapter must be configured in constructor to use this overload");
-        }
-        return denoise(input, geometry, timeoutMs, mode, this.tiler, this.adapter);
-    }
-
-    /**
-     * Denoise with explicit geometry and custom Tiler/LiteRtAdapter.
-     */
-    public DenoisedFrame denoise(FusedFrame input, FrameGeometry geometry,
-                                 long timeoutMs, RunMode mode,
-                                 Tiler tiler, LiteRtAdapter adapter) {
+    private static void validateTimeoutMs(long timeoutMs) {
         if (timeoutMs < 1 || timeoutMs > DiscardRaceRunner.MAX_TIMEOUT_MS) {
             throw new IllegalArgumentException(
                 "Timeout must be 1.." + DiscardRaceRunner.MAX_TIMEOUT_MS + " ms (rule T4)");
         }
-
-        TileInferenceAdapter tileAdapter = new TileInferenceAdapter(
-            adapter, tiler.getTileSize(), geometry.getChannels());
-
-        long startNs = timeSource.nanoTime();
-        float[] denoised = tiler.process(
-            input.getImage(), geometry.getWidth(), geometry.getHeight(),
-            geometry.getChannels(), tileAdapter);
-        long latencyNs = timeSource.nanoTime() - startNs;
-
-        return new DenoisedFrame(
-            input.getBurstId(), denoised, modelVariant, precision,
-            latencyNs, false, false);
     }
 }

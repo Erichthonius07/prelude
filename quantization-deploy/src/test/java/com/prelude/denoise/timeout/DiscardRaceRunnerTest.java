@@ -30,7 +30,7 @@ public class DiscardRaceRunnerTest {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(
             new float[]{0.9f}, inferStarted, inferProceed);
         FakeTimeSource fakeTime = new FakeTimeSource();
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<RaceResult> resultRef = new AtomicReference<>();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
@@ -38,7 +38,7 @@ public class DiscardRaceRunnerTest {
 
         new Thread(() -> {
             try {
-                resultRef.set(runner.run(testInput, 100, "cnn-v1", "fp32"));
+                resultRef.set(runner.run(testInput, 100, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE));
             } catch (Throwable e) {
                 errorRef.set(e);
             }
@@ -69,9 +69,9 @@ public class DiscardRaceRunnerTest {
     @Test
     public void inferenceWinsWhenFasterThanTimer() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.9f}, 0);
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
 
-        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32");
+        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
 
         assertTrue("Inference should have won", result.isInferenceWon());
         assertFalse("Timer should not have won", result.isTimerWon());
@@ -86,9 +86,9 @@ public class DiscardRaceRunnerTest {
     @Test
     public void nearSimultaneousExactlyOneWinner() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.7f}, 5);
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
 
-        RaceResult result = runner.run(testInput, 8, "cnn-v1", "fp32");
+        RaceResult result = runner.run(testInput, 8, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
 
         assertTrue("Exactly one winner",
             result.isInferenceWon() ^ result.isTimerWon());
@@ -105,12 +105,12 @@ public class DiscardRaceRunnerTest {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(
             new float[]{0.9f}, inferStarted, inferProceed);
         FakeTimeSource fakeTime = new FakeTimeSource();
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<RaceResult> resultRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         new Thread(() -> {
-            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32"));
+            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE));
             done.countDown();
         }).start();
 
@@ -142,12 +142,12 @@ public class DiscardRaceRunnerTest {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(
             new float[]{0.9f}, inferStarted, inferProceed);
         FakeTimeSource fakeTime = new FakeTimeSource();
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<RaceResult> resultRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         new Thread(() -> {
-            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32"));
+            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE));
             deliveryCount.incrementAndGet();
             done.countDown();
         }).start();
@@ -168,9 +168,9 @@ public class DiscardRaceRunnerTest {
     @Test
     public void inferenceRunnerNeverCalledConcurrently() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.9f}, 50);
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
 
-        runner.run(testInput, 200, "cnn-v1", "fp32");
+        runner.run(testInput, 200, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
 
         assertEquals("Max concurrent calls should be 1 (D4)",
             1, fakeInference.maxConcurrentCalls.get());
@@ -179,18 +179,42 @@ public class DiscardRaceRunnerTest {
     // ---- T7 test 8a: Exception propagates when inference wins the race ----
 
     @Test
-    public void inferenceExceptionPropagatesWhenInferenceWinsRace() throws Exception {
+    public void inferenceExceptionYieldsFusionOnlyInLiveMode() throws Exception {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(
             new RuntimeException("OOM in native"), 0);
         FakeTimeSource fakeTime = new FakeTimeSource();
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
+
+        AtomicReference<RaceResult> resultRef = new AtomicReference<>();
+        CountDownLatch done = new CountDownLatch(1);
+
+        new Thread(() -> {
+            try {
+                resultRef.set(runner.run(testInput, 100, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE));
+            } finally {
+                done.countDown();
+            }
+        }).start();
+
+        assertTrue(done.await(5, TimeUnit.SECONDS));
+        assertNotNull("Result should be returned", resultRef.get());
+        assertTrue("Frame should be fusion-only", resultRef.get().getFrame().isTimeoutOccurred());
+        assertEquals("Reason should be inference error", RaceResult.REASON_INFERENCE_ERROR, resultRef.get().getFallbackReason());
+    }
+
+    @Test
+    public void inferenceExceptionThrowsInBenchmarkMode() throws Exception {
+        FakeInferenceRunner fakeInference = new FakeInferenceRunner(
+            new RuntimeException("OOM in native"), 0);
+        FakeTimeSource fakeTime = new FakeTimeSource();
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
 
         new Thread(() -> {
             try {
-                runner.run(testInput, 100, "cnn-v1", "fp32");
+                runner.run(testInput, 100, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.BENCHMARK);
             } catch (Throwable e) {
                 errorRef.set(e);
             }
@@ -200,8 +224,6 @@ public class DiscardRaceRunnerTest {
         assertTrue(done.await(5, TimeUnit.SECONDS));
         assertNotNull("Exception should propagate", errorRef.get());
         assertTrue("Message should contain OOM", errorRef.get().getMessage().contains("OOM in native"));
-
-        try { fakeTime.releaseSleep(); } catch (Exception ignored) { }
     }
 
     // ---- T7 test 8b: Exception swallowed when timer already won ----
@@ -214,13 +236,12 @@ public class DiscardRaceRunnerTest {
             new RuntimeException("OOM in native"), inferStarted, inferProceed);
         FakeTimeSource fakeTime = new FakeTimeSource();
         CountDownLatch lateCompleteCalled = new CountDownLatch(1);
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<RaceResult> resultRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         new Thread(() -> {
-            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32",
-                lateCompleteCalled::countDown));
+            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE, lateCompleteCalled::countDown));
             done.countDown();
         }).start();
 
@@ -248,13 +269,12 @@ public class DiscardRaceRunnerTest {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(
             new float[]{0.9f}, inferStarted, inferProceed);
         FakeTimeSource fakeTime = new FakeTimeSource();
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime);
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, fakeTime, (msg, t) -> {});
 
         AtomicReference<RaceResult> resultRef = new AtomicReference<>();
         CountDownLatch done = new CountDownLatch(1);
         new Thread(() -> {
-            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32",
-                callbackFired::countDown));
+            resultRef.set(runner.run(testInput, 50, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE, callbackFired::countDown));
             done.countDown();
         }).start();
 
@@ -274,15 +294,15 @@ public class DiscardRaceRunnerTest {
     @Test(expected = IllegalArgumentException.class)
     public void rejectsTimeoutAbove500ms() {
         DiscardRaceRunner runner = new DiscardRaceRunner(
-            new FakeInferenceRunner(), SystemTimeSource.INSTANCE);
-        runner.run(testInput, 501, "cnn-v1", "fp32");
+            new FakeInferenceRunner(), SystemTimeSource.INSTANCE, (msg, t) -> {});
+        runner.run(testInput, 501, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void rejectsTimeoutOfZero() {
         DiscardRaceRunner runner = new DiscardRaceRunner(
-            new FakeInferenceRunner(), SystemTimeSource.INSTANCE);
-        runner.run(testInput, 0, "cnn-v1", "fp32");
+            new FakeInferenceRunner(), SystemTimeSource.INSTANCE, (msg, t) -> {});
+        runner.run(testInput, 0, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
     }
 
     // ---- Contract field validation ----
@@ -290,16 +310,16 @@ public class DiscardRaceRunnerTest {
     @Test
     public void outputCarriesBurstIdUnchanged() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.5f});
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
-        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32");
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
+        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
         assertEquals("burstId must be carried unchanged (D3)", "test-burst-1", result.getFrame().getBurstId());
     }
 
     @Test
     public void outputCarriesModelVariantAndPrecision() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.5f});
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
-        RaceResult result = runner.run(testInput, 500, "cnn-v1", "int8");
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
+        RaceResult result = runner.run(testInput, 500, "cnn-v1", "int8", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
         assertEquals("cnn-v1", result.getFrame().getModelVariant());
         assertEquals("int8", result.getFrame().getPrecision());
     }
@@ -307,8 +327,8 @@ public class DiscardRaceRunnerTest {
     @Test
     public void latencyMsConversionIsCorrect() {
         FakeInferenceRunner fakeInference = new FakeInferenceRunner(new float[]{0.5f});
-        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE);
-        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32");
+        DiscardRaceRunner runner = new DiscardRaceRunner(fakeInference, SystemTimeSource.INSTANCE, (msg, t) -> {});
+        RaceResult result = runner.run(testInput, 500, "cnn-v1", "fp32", com.prelude.denoise.DenoiseModule.RunMode.LIVE);
         assertEquals("latencyMs = latencyNs / 1_000_000.0 (D2)",
             result.getFrame().getLatencyNs() / 1_000_000.0,
             result.getFrame().getLatencyMs(), 0.001);

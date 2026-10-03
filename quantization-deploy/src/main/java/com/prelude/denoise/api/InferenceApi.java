@@ -38,7 +38,7 @@ public final class InferenceApi {
      * @return the nearest-rank p95 latency in milliseconds
      * @throws IllegalStateException if thermal state exceeds normal during calibration
      */
-    public long calibrateLatency(int runs, int warmupRuns,
+    public double calibrateLatency(int runs, int warmupRuns,
                                  ThermalStateProvider thermalStateProvider,
                                  FusedFrame dummyInput) {
         if (thermalStateProvider.getCurrentThermalStatus() > 1) {
@@ -68,6 +68,6 @@ public final class InferenceApi {
         int safeIndex = Math.max(0, Math.min(p95Index, runs - 1));
 
         // Convert nanoseconds to milliseconds
-        return latencies[safeIndex] / 1_000_000L;
+        return latencies[safeIndex] / 1_000_000.0;
     }
 }

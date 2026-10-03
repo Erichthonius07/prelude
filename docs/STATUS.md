@@ -194,7 +194,7 @@ repo reconciled with `origin/main` (see Resolved history)._
 | Alignment + confidence classifier | 2 | Not started |
 | Fusion (4-way) + post-process + demo UI | 3 | Phase 1 demo code in `fusion-postprocess-demo/` (strategies, tone mapping, sharpening, SSIM search — unit tested); on-device pipeline pending Role 2 |
 | Primary CNN training | 4 | Not started |
-| Quantization + deployment + discard-race | 5a | ✅ Discard-race + tiling + calibration API + Android module — all Java, 21 tests. INT8 PTQ smoke-test done: PSNR 34.39 dB, SSIM 0.9969, 3.7× compression (607 KB). Parity gate PASS. sRGB domain — awaiting linear-domain checkpoint from Role 4 (2026-10-03) |
+| Quantization + deployment + discard-race | 5a | Java module built and unit-tested (discard-race, single-flight, tiling, calibration API): 27 JVM tests. NOT done yet: real LiteRT inference, on-device latency, final INT8 run. Pipeline smoke-test only: PyTorch→LiteRT parity PASS (max-abs-diff 3.1e-6); INT8 PTQ on synthetic sRGB data (FP32-vs-INT8 agreement only, not quality vs ground truth) — awaiting linear-domain checkpoint from Role 4 (2026-10-03) |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
 
 ## Open issues & architectural gaps (escalated to the orchestrator — do NOT silently fix)

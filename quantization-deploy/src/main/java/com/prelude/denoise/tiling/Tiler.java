@@ -114,6 +114,9 @@ public final class Tiler {
         return output;
     }
 
+    // Note: images smaller than one tile are zero-padded to the tile size.
+    // Edge pixels may differ from a same-size full-frame run due to receptive field bleed.
+    // Real frames are larger than a tile.
     private void extractTile(float[] source, int srcW, int srcH, int channels,
                              int startX, int startY, float[] dest) {
         java.util.Arrays.fill(dest, 0f);

@@ -32,6 +32,8 @@ src/main/java/com/prelude/denoise/
 ### Python scripts
 ```
 convert_smoke.py    — PyTorch → LiteRT FP32 conversion + parity gate
+quantize.py         — INT8 PTQ (currently a smoke test on synthetic sRGB)
+submit_metrics.py   — Submits metrics/latency to Results Service
 requirements.txt    — Python deps (ai-edge-torch, ai-edge-quantizer)
 ```
 
@@ -89,8 +91,8 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 | Metric | Value |
 |---|---|
 | Parity gate (PyTorch vs FP32 LiteRT) | PASS — max-abs-diff 3.10e-06, PSNR 123.94 dB |
-| FP32 vs INT8 mean PSNR | 34.39 dB |
-| FP32 vs INT8 mean SSIM | 0.9969 |
+| FP32 vs INT8 mean PSNR | 34.39 dB (Smoke Test) |
+| FP32 vs INT8 mean SSIM | 0.9969 (Smoke Test) |
 | FP32 vs INT8 worst PSNR | 34.36 dB |
 | FP32 model size | 2,250,552 bytes |
 | INT8 model size | 607,792 bytes (3.7× smaller) |
@@ -111,3 +113,5 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 - [ ] Results client (W1–W7 — separate task)
 - [ ] On-device benchmarks (needs Primary Device)
 - [ ] Final quantization with real SIDD data (needs linear-domain checkpoint from Role 4)
+
+Note: images smaller than one tile are zero-padded; edge pixels may differ from a same-size run; real frames are larger than a tile.

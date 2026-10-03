@@ -20,90 +20,80 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class DiscardRaceRunner {
 
-    /** Hard ceiling for timeout value (rule T4). */
     public static final long MAX_TIMEOUT_MS = 500L;
-
-    /** Fallback timeout for uncalibrated devices in dev/test builds (T4). */
     public static final long UNCALIBRATED_TIMEOUT_MS = 500L;
 
     private final InferenceRunner inferenceRunner;
     private final TimeSource timeSource;
+    private final ErrorListener errorListener;
 
-    public DiscardRaceRunner(InferenceRunner inferenceRunner, TimeSource timeSource) {
+    public DiscardRaceRunner(InferenceRunner inferenceRunner, TimeSource timeSource, ErrorListener errorListener) {
         this.inferenceRunner = inferenceRunner;
         this.timeSource = timeSource;
+        this.errorListener = errorListener;
     }
 
-    /**
-     * Run inference with a competing timer.
-     *
-     * @param input       the fused frame to denoise
-     * @param timeoutMs   calibrated timeout in ms (T4: 1..MAX_TIMEOUT_MS)
-     * @param modelVariant model name for the output frame (C6)
-     * @param precision   "fp32" or "int8"
-     * @return RaceResult with the frame and live race state
-     */
-    public RaceResult run(FusedFrame input, long timeoutMs,
-                          String modelVariant, String precision) {
-        return run(input, timeoutMs, modelVariant, precision, null);
+    public RaceResult run(FusedFrame input, long timeoutMs, String modelVariant, String precision,
+                          com.prelude.denoise.DenoiseModule.RunMode mode) {
+        return run(input, timeoutMs, modelVariant, precision, mode, null);
     }
 
-    /**
-     * Run inference with a competing timer.
-     *
-     * @param onLateInferenceComplete called when a late inference finishes
-     *     (or fails) after the timer already won. Used by DenoiseModule
-     *     to clear the single-flight busy flag (A26/T6).
-     */
-    public RaceResult run(FusedFrame input, long timeoutMs,
-                          String modelVariant, String precision,
-                          Runnable onLateInferenceComplete) {
+    public RaceResult run(FusedFrame input, long timeoutMs, String modelVariant, String precision,
+                          com.prelude.denoise.DenoiseModule.RunMode mode, Runnable onLateInferenceComplete) {
         if (timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) {
-            throw new IllegalArgumentException(
-                "Timeout must be 1.." + MAX_TIMEOUT_MS + " ms (rule T4, ceiling enforced)");
+            throw new IllegalArgumentException("Timeout must be 1.." + MAX_TIMEOUT_MS + " ms (rule T4, ceiling enforced)");
         }
 
-        // Shared state: only ONE thread can move this from PENDING
         AtomicReference<RaceState> state = new AtomicReference<>(RaceState.PENDING);
         AtomicReference<DenoisedFrame> frameRef = new AtomicReference<>();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        AtomicReference<String> fallbackReasonRef = new AtomicReference<>(null);
         CountDownLatch latch = new CountDownLatch(1);
         AtomicReference<Thread> lateThreadRef = new AtomicReference<>();
+        AtomicReference<Thread> timerThreadRef = new AtomicReference<>();
 
-        // --- Inference thread (T1: synchronous, not cancellable) ---
+        long raceStartNs = timeSource.nanoTime();
+
         Thread inferThread = new Thread(() -> {
             try {
-                long startNs = timeSource.nanoTime();
                 float[] pixels = inferenceRunner.run(input);
-                long elapsedNs = timeSource.nanoTime() - startNs;
+                long elapsedNs = timeSource.nanoTime() - raceStartNs;
 
                 if (state.compareAndSet(RaceState.PENDING, RaceState.INFERENCE_WON)) {
-                    // T2: inference won the race
                     frameRef.set(new DenoisedFrame(
                         input.getBurstId(), pixels, modelVariant, precision,
                         elapsedNs, false, false
                     ));
+                    Thread t = timerThreadRef.get();
+                    if (t != null) t.interrupt();
                     latch.countDown();
                 } else {
-                    // T3: timer already won — result is DISCARDED
                     state.compareAndSet(RaceState.TIMER_WON, RaceState.DISCARDED);
                     if (onLateInferenceComplete != null) onLateInferenceComplete.run();
                 }
             } catch (Throwable e) {
                 if (state.compareAndSet(RaceState.PENDING, RaceState.FAILED)) {
-                    // Inference failed before timer — propagate to caller
-                    errorRef.set(e);
+                    if (mode == com.prelude.denoise.DenoiseModule.RunMode.BENCHMARK) {
+                        errorRef.set(e);
+                    } else {
+                        if (errorListener != null) {
+                            errorListener.onError("Inference failed", e);
+                        }
+                        long elapsedNs = timeSource.nanoTime() - raceStartNs;
+                        frameRef.set(new DenoisedFrame(
+                            input.getBurstId(), Arrays.copyOf(input.getImage(), input.getImage().length),
+                            modelVariant, precision, elapsedNs, false, true
+                        ));
+                        fallbackReasonRef.set(RaceResult.REASON_INFERENCE_ERROR);
+                    }
                     latch.countDown();
                 } else {
-                    // Timer already won and late inference failed
                     if (onLateInferenceComplete != null) onLateInferenceComplete.run();
                 }
             }
         }, "denoise-inference");
         inferThread.setDaemon(true);
-        inferThread.start();
 
-        // --- Timer thread (parallel) ---
         Thread timerThread = new Thread(() -> {
             try {
                 timeSource.sleepMs(timeoutMs);
@@ -113,35 +103,35 @@ public final class DiscardRaceRunner {
             }
 
             if (state.compareAndSet(RaceState.PENDING, RaceState.TIMER_WON)) {
-                // T3: timer won — emit fusion-only frame immediately
+                long elapsedNs = timeSource.nanoTime() - raceStartNs;
                 frameRef.set(new DenoisedFrame(
-                    input.getBurstId(),
-                    Arrays.copyOf(input.getImage(), input.getImage().length),
-                    modelVariant, precision,
-                    0L, false, true
+                    input.getBurstId(), Arrays.copyOf(input.getImage(), input.getImage().length),
+                    modelVariant, precision, elapsedNs, false, true
                 ));
                 lateThreadRef.set(inferThread);
+                fallbackReasonRef.set(RaceResult.REASON_TIMEOUT);
                 latch.countDown();
             }
-            // If inference already won or failed, timer is a no-op
         }, "denoise-timer");
         timerThread.setDaemon(true);
+        timerThreadRef.set(timerThread);
+
+        inferThread.start();
         timerThread.start();
 
         try {
-            latch.await();  // exactly one thread counts down
+            latch.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for race result", e);
         }
 
-        // Propagate inference errors if inference won the race with an exception
         Throwable err = errorRef.get();
         if (err != null) {
             if (err instanceof RuntimeException) throw (RuntimeException) err;
             throw new RuntimeException(err);
         }
 
-        return new RaceResult(frameRef.get(), state, lateThreadRef.get());
+        return new RaceResult(frameRef.get(), state, lateThreadRef.get(), fallbackReasonRef.get());
     }
 }

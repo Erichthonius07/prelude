@@ -13,6 +13,10 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class RaceResult {
 
+    public static final String REASON_BUSY = "BUSY";
+    public static final String REASON_TIMEOUT = "TIMEOUT";
+    public static final String REASON_INFERENCE_ERROR = "INFERENCE_ERROR";
+
     /** The frame to deliver downstream (pipeline continues with this). */
     private final DenoisedFrame frame;
     private final AtomicReference<RaceState> state;
@@ -22,16 +26,20 @@ public final class RaceResult {
      * Null when inference won, or when the result is a BUSY fallback.
      */
     private final Thread lateInferenceThread;
+    
+    private final String fallbackReason;
 
     RaceResult(DenoisedFrame frame, AtomicReference<RaceState> state,
-               Thread lateInferenceThread) {
+               Thread lateInferenceThread, String fallbackReason) {
         this.frame = frame;
         this.state = state;
         this.lateInferenceThread = lateInferenceThread;
+        this.fallbackReason = fallbackReason;
     }
 
     public DenoisedFrame getFrame() { return frame; }
     public Thread getLateInferenceThread() { return lateInferenceThread; }
+    public String getFallbackReason() { return fallbackReason; }
 
     /** True if inference finished before the timer. */
     public boolean isInferenceWon() {
@@ -72,7 +80,8 @@ public final class RaceResult {
         return new RaceResult(
             frame,
             new AtomicReference<>(RaceState.TIMER_WON),
-            null
+            null,
+            REASON_BUSY
         );
     }
 }

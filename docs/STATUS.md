@@ -194,7 +194,7 @@ repo reconciled with `origin/main` (see Resolved history)._
 | Alignment + confidence classifier | 2 | Not started |
 | Fusion (4-way) + post-process + demo UI | 3 | Phase 1 demo code in `fusion-postprocess-demo/` (strategies, tone mapping, sharpening, SSIM search — unit tested); on-device pipeline pending Role 2 |
 | Primary CNN training | 4 | Not started |
-| Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + tiling + calibration API + Android module scaffold — all Java. 21 unit tests passing. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference + INT8 quantization blocked by Role 4 checkpoint (2026-10-02) |
+| Quantization + deployment + discard-race | 5a | ✅ Discard-race + tiling + calibration API + Android module — all Java, 21 tests. INT8 PTQ smoke-test done: PSNR 34.39 dB, SSIM 0.9969, 3.7× compression (607 KB). Parity gate PASS. sRGB domain — awaiting linear-domain checkpoint from Role 4 (2026-10-03) |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
 
 ## Open issues & architectural gaps (escalated to the orchestrator — do NOT silently fix)

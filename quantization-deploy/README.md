@@ -81,6 +81,22 @@ Overlapping-tile inference with blended edges (D3):
 - Tiled output matches full-frame within 2.38e-7 max-abs-diff (float32 precision limit)
 - Peak tile working memory: 1.75 MB
 
+## Quantization results (smoke-test — sRGB domain)
+
+Checkpoint: `training/dncnn_best_med.pth` (Role 4 commit `89e3ffe`)
+Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
+
+| Metric | Value |
+|---|---|
+| Parity gate (PyTorch vs FP32 LiteRT) | PASS — max-abs-diff 3.10e-06, PSNR 123.94 dB |
+| FP32 vs INT8 mean PSNR | 34.39 dB |
+| FP32 vs INT8 mean SSIM | 0.9969 |
+| FP32 vs INT8 worst PSNR | 34.36 dB |
+| FP32 model size | 2,250,552 bytes |
+| INT8 model size | 607,792 bytes (3.7× smaller) |
+| Latency | NOT RUN — needs Primary Device (rule D5) |
+| Calibration data | 100 synthetic sRGB samples (final run: real SIDD train/val via leakage guard) |
+
 ## Status
 
 - [x] Module scaffold (build.gradle.kts, AndroidManifest.xml, source dirs)
@@ -90,7 +106,8 @@ Overlapping-tile inference with blended edges (D3):
 - [x] Tiling with blended edges (Tiler + 3 tests)
 - [x] Calibration API (InferenceApi for D6)
 - [x] PyTorch → LiteRT FP32 Conversion & Parity Gate (`convert_smoke.py`)
-- [ ] LiteRT inference integration (blocked on W1: trained checkpoint)
-- [ ] INT8 quantization (blocked on W1: trained checkpoint)
+- [x] INT8 quantization — smoke-test (`quantize.py`, sRGB domain)
+- [ ] LiteRT inference integration (needs model bundled in assets)
 - [ ] Results client (W1–W7 — separate task)
 - [ ] On-device benchmarks (needs Primary Device)
+- [ ] Final quantization with real SIDD data (needs linear-domain checkpoint from Role 4)

@@ -76,7 +76,42 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- Testcontainers for the CI integration gate (versions managed by the Testcontainers BOM).
+         Testcontainers 2.x renamed the modules: junit-jupiter -> testcontainers-junit-jupiter,
+         postgresql -> testcontainers-postgresql. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <!-- The Boot 4.1.0 parent BOM manages spring-boot-testcontainers itself but NO LONGER manages
+       org.testcontainers:* artifacts (dependency:resolve fails without a version). Import the
+       Testcontainers BOM once here instead of pinning per-dependency: 2.0.5 is the exact version
+       spring-boot-testcontainers 4.1.0 was built against (verified via its published POM). -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>2.0.5</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <build>
     <plugins>

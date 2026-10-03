@@ -1,10 +1,10 @@
 # Prelude — Build Status (single source of truth)
 
-_Last updated 2026-10-02 by Role 1's **system agent** (verification pass): Read API +
-paired bootstrap verified end-to-end, Flyway V1+V2 verified on a fresh volume, and the
-repo reconciled with `origin/main` (7 Role 5a commits arrived mid-pass from a stale local
-clone — see Resolved history). Prior entry: Role 1, after the first real capture-android
-build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-trip._
+_Last updated 2026-10-02 by Role 1's **system agent** (verification pass #2): pom.xml audited,
+Testcontainers CI gate landed (16/16 backend tests incl. a caught 201-contract violation),
+`alignmentConfidenceFloor` delivery path closed on-device, Role 2's alignment merge pulled.
+Pass #1: Read API + paired bootstrap verified end-to-end, Flyway V1+V2 on a fresh volume,
+repo reconciled with `origin/main` (see Resolved history)._
 
 ## Resolved history (was broken, now fixed — kept so STATUS stays trustworthy)
 
@@ -73,6 +73,24 @@ build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-tr
      interim scaffold and Gradle edits were **discarded**, `main` fast-forwarded to
      `origin/main` (8ec4bdc), and doc updates were re-applied on top. The post-pull
      `gradlew build` re-verification below covers Role 5a's real module and its tests.
+- **System-agent verification pass #2 (2026-10-02)** — the pom/Testcontainers/alignment-floor
+  deliverables had been pre-applied in the working tree, defectively:
+  1. A complete alternate `PairedBootstrapTest` sat in **`src/main/java`** (JUnit absent from
+     the main classpath → `mvn compile` breaks; also duplicate FQCN with the committed
+     `src/test` suite). Deleted; the committed `src/test/.../stats/PairedBootstrapTest.java`
+     (11 tests, incl. the reference-implementation cross-check) remains canonical.
+  2. `IngestionApiIntegrationTest.java` had been created at a mangled double-nested path
+     (`.../resultsservice/results-service/src/test/java/...`). Relocated to
+     `src/test/java/com/prelude/resultsservice/`, then adapted to Boot 4: **TestRestTemplate no
+     longer exists** (`RestTemplate` + `@LocalServerPort`, no-throw error handler replicating
+     TestRestTemplate semantics; Spring 7's `ResponseErrorHandler` only overrides `hasError`).
+  3. The Boot 4.1.0 BOM no longer manages `org.testcontainers:*`, and Testcontainers 2.x
+     renamed the modules (`junit-jupiter` → `testcontainers-junit-jupiter`,
+     `postgresql` → `testcontainers-postgresql`). Fixed via an imported
+     `testcontainers-bom:2.0.5` (the exact version `spring-boot-testcontainers` 4.1.0 was
+     built against) + 2.x coordinates; dependency entries stay version-less.
+  4. The integration gate exposed that ingestion endpoints returned 200 where contract §10
+     mandates **201 on first acceptance** — both controllers fixed (see Newly closed decisions).
 
 ## Reconstructed code — verified against the contract (2026-10-02)
 
@@ -128,6 +146,24 @@ build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-tr
   `libs.versions.toml`, mirrored into `docs/versions.md`). Re-verified on this machine
   post-pull: `gradlew clean build` green with the module in the graph.
 
+- **`alignmentConfidenceFloor` delivery path** — resolved as a simple on-device read path inside
+  `CalibrationRepository` (orchestrator decision, Option 3): `saveAlignmentConfidenceFloor(Float)`
+  persists it and `load()` now returns it via `DeviceThresholds.alignmentConfidenceFloor`. No
+  server-side device-profile endpoint added; the contract stays lean. The calculator itself
+  remains a stub until Role 2's RANSAC lands.
+- **Testcontainers CI gate** — `IngestionApiIntegrationTest` using `@ServiceConnection` +
+  PostgreSQL 18 (Boot-BOM-managed `spring-boot-testcontainers`; Testcontainers 2.0.5 via
+  imported `testcontainers-bom` — see versions.md). Regression coverage for the 5 hardest
+  contract rules: happy path (201), safe retry (200 `duplicate:true`), key reuse (409
+  `IDEMPOTENCY_KEY_REUSED`), server-assigned supersede, and the test-set leakage guard.
+  **Writing it immediately caught a real contract violation:** ingestion endpoints returned
+  plain 200s although §10 says 201 on first acceptance — `MetricsIngestionController` and
+  `RunController` now return 201/200 keyed off the `duplicate` flag. Android clients are
+  unaffected (`isSuccessful` covers both).
+- **Role 2 alignment landed** (merged via PR #1): the `alignment/` training pipeline
+  (ORB matching, RANSAC, feature extraction, classifier training) is on `origin/main` —
+  the on-device classifier is still pending, so calibration-side stubs stay stubs.
+
 ## Decision log — all formerly open items are resolved
 
 | Item | Resolution |
@@ -152,26 +188,21 @@ build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-tr
 | Results Service schema evolution | 1 | ✅ Flyway + `ddl-auto: validate`; add-only policy in force |
 | Read/query API (demo app, bootstrap retrieval) | 1 | ✅ Implemented (pending ratification of addendum v1.1.0); verified live incl. bootstrap compute-and-store (2026-10-02) |
 | Capture (Android) | 1 | ✅ Builds + unit tests green on JDK 25 / Gradle 9.7.1 / AGP 9.4.0 built-in Kotlin (2026-10-02). Camera path is static-review only — no device run yet. |
-| Calibration tool | 1 | In-app debug mode (closed decision). Blur/texture threshold built; alignment floor + min-frame-count + inference timeout stubbed, blocked on Roles 2/3/4/5a. |
+| Calibration tool | 1 | In-app debug mode (closed decision). Blur/texture threshold built; alignment-floor **persistence path** now exists (`CalibrationRepository.save/load`), calculator still stubbed pending Role 2's on-device classifier; min-frame-count + inference timeout stubbed, blocked on Roles 3/4/5a. |
 | Pipeline-mode orchestration (`fusion_multi`/`fusion_single`) | 1 | ✅ Pure decider (`com.prelude.pipeline.PipelineModeDecider`) reimplemented from its test — 11/11 unit tests. |
 | Batch runner | 1 | Architecture decided (on-device instrumented harness). Skeleton only — blocked on full pipeline. |
 | Alignment + confidence classifier | 2 | Not started |
 | Fusion (4-way) + post-process + demo UI | 3 | Phase 1 demo code in `fusion-postprocess-demo/` (strategies, tone mapping, sharpening, SSIM search — unit tested); on-device pipeline pending Role 2 |
 | Primary CNN training | 4 | Not started |
-| Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + Android module scaffold implemented. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference blocked by Role 4 checkpoint (2026-10-02) |
+| Quantization + deployment + discard-race | 5a | ✅ Discard-race timeout + tiling + calibration API + Android module scaffold — all Java. 21 unit tests passing. Conversion & parity gate proven (litert-torch FP32 pass). LiteRT inference + INT8 quantization blocked by Role 4 checkpoint (2026-10-02) |
 | Restormer stretch | 5b | Unblocked for Phase 1–2 smoke test |
 
 ## Open issues & architectural gaps (escalated to the orchestrator — do NOT silently fix)
 
-- **`alignmentConfidenceFloor` delivery gap.** There is **no runtime delivery path and no API
-  format** for the calibrated alignment-confidence floor: the calculator in the calibration
-  tool is a stub blocked on Role 2's RANSAC, and `CalibrationRepository` neither persists nor
-  loads the value. **Decision needed from the orchestrator:** on-device read path vs. a
-  Results Service endpoint. **Do not invent a wire format until that decision is made.**
 - **Role 2 RANSAC labeling threshold.** Role 2 asked for a calibrated inlier-ratio cutoff for
-  training labels; that is a **training-time artifact, not the runtime floor** (distinct from
-  the gap above). Recommended approach: data-driven — derive the cutoff from real RANSAC
-  output once Role 2 builds it, rather than picking a constant now.
+  training labels; that is a **training-time artifact, not a runtime floor**. Recommended
+  approach: data-driven — derive the cutoff from real RANSAC output (now available in
+  `alignment/` on main) rather than picking a constant now.
 
 ## Engineering notes
 
@@ -179,3 +210,16 @@ build (JDK 25 / Gradle 9.7.1 / AGP 9.4.0) and the capture-contract live round-tr
 - Manifest admin auth is intentionally minimal (Q6); treat it as a convenience lock, not a security boundary.
 - The Results Service contract round-trip test (`ResultsServiceClientTest`) skips itself
   unless `PRELUDE_LIVE_URL` is set — CI runs it as a static schema check only.
+
+**Post-merge operational notes (2026-10-02, system-agent pass #2):**
+
+- **§10 status codes are now enforced**: ingestion and run-registration endpoints return
+  **201 on first acceptance, 200 with `duplicate: true` on idempotent replay** (they
+  previously returned 200 for both). Clients using generic success checks are unaffected;
+  any client asserting a literal 200 on a first POST must update.
+- **The Testcontainers CI gate needs Docker**: `IngestionApiIntegrationTest` starts its own
+  `postgres:18-alpine` container via `@ServiceConnection`; CI (and any dev running
+  `mvn test`) must have a reachable Docker daemon or those 5 tests cannot run.
+- **Role 5a's `:quantization-deploy` is pure Java as of `67b3bbd`** (the Kotlin sources were
+  replaced module-wide, 21 unit tests). Clones still carrying the old Kotlin sources just
+  pull — no local state carries over.

@@ -12,6 +12,8 @@ import com.prelude.resultsservice.dto.PostProcessPayload;
 import com.prelude.resultsservice.dto.TrainingPayload;
 import com.prelude.resultsservice.service.IngestionService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,42 +30,48 @@ public class MetricsIngestionController {
     }
 
     @PostMapping("/metrics/capture")
-    public IngestionResponse capture(@Valid @RequestBody IngestionEnvelope<CapturePayload> envelope) {
-        return ingestion.ingestCapture(envelope);
+    public ResponseEntity<IngestionResponse> capture(@Valid @RequestBody IngestionEnvelope<CapturePayload> envelope) {
+        return respond(ingestion.ingestCapture(envelope));
     }
 
     @PostMapping("/metrics/alignment")
-    public IngestionResponse alignment(@Valid @RequestBody IngestionEnvelope<AlignmentPayload> envelope) {
-        return ingestion.ingestAlignment(envelope);
+    public ResponseEntity<IngestionResponse> alignment(@Valid @RequestBody IngestionEnvelope<AlignmentPayload> envelope) {
+        return respond(ingestion.ingestAlignment(envelope));
     }
 
     @PostMapping("/metrics/fusion")
-    public IngestionResponse fusion(@Valid @RequestBody IngestionEnvelope<FusionPayload> envelope) {
-        return ingestion.ingestFusion(envelope);
+    public ResponseEntity<IngestionResponse> fusion(@Valid @RequestBody IngestionEnvelope<FusionPayload> envelope) {
+        return respond(ingestion.ingestFusion(envelope));
     }
 
     @PostMapping("/metrics/denoise")
-    public IngestionResponse denoise(@Valid @RequestBody IngestionEnvelope<DenoisePayload> envelope) {
-        return ingestion.ingestDenoise(envelope);
+    public ResponseEntity<IngestionResponse> denoise(@Valid @RequestBody IngestionEnvelope<DenoisePayload> envelope) {
+        return respond(ingestion.ingestDenoise(envelope));
     }
 
     @PostMapping("/metrics/postprocess")
-    public IngestionResponse postprocess(@Valid @RequestBody IngestionEnvelope<PostProcessPayload> envelope) {
-        return ingestion.ingestPostProcess(envelope);
+    public ResponseEntity<IngestionResponse> postprocess(@Valid @RequestBody IngestionEnvelope<PostProcessPayload> envelope) {
+        return respond(ingestion.ingestPostProcess(envelope));
     }
 
     @PostMapping("/metrics/training")
-    public IngestionResponse training(@Valid @RequestBody IngestionEnvelope<TrainingPayload> envelope) {
-        return ingestion.ingestTraining(envelope);
+    public ResponseEntity<IngestionResponse> training(@Valid @RequestBody IngestionEnvelope<TrainingPayload> envelope) {
+        return respond(ingestion.ingestTraining(envelope));
     }
 
     @PostMapping("/metrics/batch-variant")
-    public IngestionResponse batchVariant(@Valid @RequestBody IngestionEnvelope<BatchPayload> envelope) {
-        return ingestion.ingestBatchVariant(envelope);
+    public ResponseEntity<IngestionResponse> batchVariant(@Valid @RequestBody IngestionEnvelope<BatchPayload> envelope) {
+        return respond(ingestion.ingestBatchVariant(envelope));
     }
 
     @PostMapping("/metrics/bootstrap")
-    public IngestionResponse bootstrap(@Valid @RequestBody IngestionEnvelope<BootstrapPayload> envelope) {
-        return ingestion.ingestBootstrap(envelope);
+    public ResponseEntity<IngestionResponse> bootstrap(@Valid @RequestBody IngestionEnvelope<BootstrapPayload> envelope) {
+        return respond(ingestion.ingestBootstrap(envelope));
+    }
+
+    /** Contract §10: 201 on first acceptance; 200 with duplicate:true on idempotent replay. */
+    private static ResponseEntity<IngestionResponse> respond(IngestionResponse response) {
+        HttpStatus status = response.duplicate() ? HttpStatus.OK : HttpStatus.CREATED;
+        return ResponseEntity.status(status).body(response);
     }
 }

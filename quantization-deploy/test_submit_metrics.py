@@ -18,6 +18,10 @@ class TestSubmitMetrics(unittest.TestCase):
         }
         
         self.latency_data = {
+            "metadata": {
+                "numThreads": 4,
+                "delegate": "XNNPACK requested"
+            },
             "events": [
                 {"imageId": "img1", "precision": "fp32", "latencyMs": 150.0, "discardRaceEvent": False, "timeoutEvent": False},
                 {"imageId": "img1", "precision": "int8", "latencyMs": 50.0, "discardRaceEvent": False, "timeoutEvent": False}
@@ -50,6 +54,7 @@ class TestSubmitMetrics(unittest.TestCase):
         payload = envelope["payload"]
         self.assertEqual(payload["modelVariant"], "cnn-v1")
         self.assertEqual(payload["inputDomain"], "sRGB")
+        self.assertNotIn("metadata", payload, "Local metadata must not be leaked into wire payload")
         
         images = payload["images"]
         self.assertEqual(len(images), 2)

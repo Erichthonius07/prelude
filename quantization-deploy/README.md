@@ -42,12 +42,12 @@ requirements.txt    — Python deps (ai-edge-torch, ai-edge-quantizer)
 | Dependency | Version | Why | Where pinned | Source |
 |---|---|---|---|---|
 | `com.google.ai.edge.litert:litert` | 2.1.5 | On-device LiteRT inference runtime | `capture-android/gradle/libs.versions.toml` | [Google Maven](https://maven.google.com/web/index.html#com.google.ai.edge.litert:litert) |
+| `androidx.test.ext:junit` | 1.1.5 | JUnit extensions for Android instrumented tests | `quantization-deploy/build.gradle.kts` | Google Maven |
+| `androidx.test:core` | 1.5.0 | Core Android test APIs | `quantization-deploy/build.gradle.kts` | Google Maven |
 | `ai-edge-torch` (LiteRT Torch) | 0.7.2 | PyTorch to LiteRT FP32 conversion | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-torch/) |
 | `ai-edge-quantizer` | 0.4.1 | INT8 Post-Training Quantization (PTQ) | `quantization-deploy/requirements.txt` | [PyPI](https://pypi.org/project/ai-edge-quantizer/) |
 
-> **Note:** The LiteRT dependency is declared in the version catalog but
-> commented out in `build.gradle.kts` until the actual inference code is
-> written (requires a `.tflite` model).
+> **Note:** The `.tflite` and `.pth` files are ignored in `.gitignore`. The single final model file will be an exception in `.gitignore` (decision A24).
 
 ## Spec deviation: NNAPI → LiteRT accelerators
 
@@ -55,6 +55,31 @@ The spec says "NNAPI delegate", but **NNAPI is deprecated since Android 15**
 (API 35). This module uses LiteRT 2.x with the Interpreter API (CPU/XNNPACK
 baseline). GPU/NPU acceleration via CompiledModel API is a future measured
 experiment with explicit CPU fallback. See rule D2.
+
+### Inference Engine & Benchmark Metadata
+
+- **Runtime**: LiteRT 2.1.5 (CPU baseline)
+- **Threads**: `NUM_THREADS = 4` (pinned constant in `LiteRtAdapterImpl`)
+- **Delegate**: `"XNNPACK requested"` (requested via `options.setUseXNNPACK(true)`)
+- **Local benchmark/latency JSON metadata format**:
+  ```json
+  {
+    "metadata": {
+      "numThreads": 4,
+      "delegate": "XNNPACK requested"
+    },
+    "events": [
+      {
+        "imageId": "img1",
+        "precision": "fp32",
+        "latencyMs": 150.0,
+        "discardRaceEvent": false,
+        "timeoutEvent": false
+      }
+    ]
+  }
+  ```
+  *(Note: `metadata` is stored in the local latency JSON file for local benchmarking and audit; it is not sent over the wire in the HTTP payload to `/api/v1/metrics/denoise`).*
 
 ## Language decision: Java (not Kotlin)
 
@@ -74,6 +99,7 @@ Implemented per rules T1–T8. Key design:
 - Single-flight policy (A26/T6): live = BUSY fusion-only; benchmark = bounded wait
 - Timeout: calibrated `DeviceThresholds.inferenceTimeoutMs` (p95 + 20%, max 500 ms)
 - `pipelineMode` is **never read** by timeout logic (T5/D4)
+- Note: the `denoise(FusedFrame, FrameGeometry, …)` overload is not yet timeout-protected.
 
 ## Tiling
 
@@ -109,7 +135,7 @@ Input domain: **sRGB** — not final (pipeline uses linear FusedFrame, rule C3)
 - [x] Calibration API (InferenceApi for D6)
 - [x] PyTorch → LiteRT FP32 Conversion & Parity Gate (`convert_smoke.py`)
 - [x] INT8 quantization — smoke-test (`quantize.py`, sRGB domain)
-- [ ] LiteRT inference integration (needs model bundled in assets)
+- [x] LiteRT inference integration (HWC↔NCHW, lifecycle) — NOT RUN on a device
 - [ ] Results client (W1–W7 — separate task)
 - [ ] On-device benchmarks (needs Primary Device)
 - [ ] Final quantization with real SIDD data (needs linear-domain checkpoint from Role 4)

@@ -3,6 +3,7 @@ ai-edge-torch==0.7.2
 ai-edge-litert==2.1.5
 ai-edge-quantizer==0.7.0
 numpy==2.5.3
+scipy==1.18.1
 scikit-image==0.26.0
 Pillow==12.3.0
 requests==2.34.2

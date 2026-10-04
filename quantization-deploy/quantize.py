@@ -133,14 +133,15 @@ def run_parity_gate(model: DnCNN, tflite_path: Path) -> dict:
     return result
 
 
-def quantize_int8(fp32_path: Path, int8_path: Path) -> None:
+def quantize_int8(fp32_path: Path, int8_path: Path,
+                  calibration_dir: Path | None = None) -> tuple[str, int]:
     """
     INT8 post-training quantization using ai-edge-quantizer.
-    Representative data: synthetic samples in [0,1] sRGB domain.
+    Representative data: real sRGB blocks from --calibration-dir when given
+    (HWC float32 [0,1] .npy files), else synthetic samples (smoke test).
 
-    NOTE (rule Q2): Final quantization MUST use real SIDD train/val
-    data filtered through the leakage guard. This uses synthetic
-    data for the smoke-test since SIDD images are gitignored.
+    NOTE (rule Q2): graded runs must use leakage-guard-checked data.
+    Returns (calibration_source, num_samples).
     """
     from ai_edge_quantizer import Quantizer
     from ai_edge_quantizer.qtyping import TFLOperationName, QuantGranularity
@@ -166,13 +167,24 @@ def quantize_int8(fp32_path: Path, int8_path: Path) -> None:
         except Exception:
             pass  # Skip ops not present in the model
 
-    # 3. Generate representative calibration data
+    # 3. Representative calibration data
     #    Model signature: serving_default, input name: args_0
-    np.random.seed(42)
-    calibration_samples = []
-    for _ in range(NUM_CALIBRATION_SAMPLES):
-        sample = np.random.rand(*INPUT_SHAPE).astype(np.float32)
-        calibration_samples.append({"args_0": sample})
+    if calibration_dir is not None:
+        calibration_samples = []
+        npy_files = sorted(Path(calibration_dir).glob("*.npy"))[:NUM_CALIBRATION_SAMPLES]
+        for npy_path in npy_files:
+            block = np.load(npy_path)  # HWC float32 [0,1] (sRGB, rule C3)
+            calibration_samples.append(
+                {"args_0": np.transpose(block, (2, 0, 1))[None, ...].astype(np.float32)})
+        calibration_source = f"real_srgb_blocks:{Path(calibration_dir).name}"
+        print(f"  Calibrating with {len(calibration_samples)} real blocks from {calibration_dir}")
+    else:
+        np.random.seed(42)
+        calibration_samples = []
+        for _ in range(NUM_CALIBRATION_SAMPLES):
+            sample = np.random.rand(*INPUT_SHAPE).astype(np.float32)
+            calibration_samples.append({"args_0": sample})
+        calibration_source = "synthetic_srgb_smoke_test"
 
     # 4. Calibrate
     print("  Calibrating with representative data...")
@@ -192,6 +204,7 @@ def quantize_int8(fp32_path: Path, int8_path: Path) -> None:
 
     print(f"  INT8 LiteRT model saved to: {int8_path}")
     print(f"  INT8 file size: {int8_path.stat().st_size:,} bytes")
+    return calibration_source, len(calibration_samples)
 
 
 def evaluate_fp32_vs_int8(fp32_path: Path, int8_path: Path) -> list:
@@ -258,6 +271,17 @@ def evaluate_fp32_vs_int8(fp32_path: Path, int8_path: Path) -> list:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="INT8 PTQ pipeline (rule Q1)")
+    parser.add_argument("--calibration-dir", default=None,
+                        help="directory of .npy sRGB blocks; default = synthetic smoke data")
+    parser.add_argument("--skip-convert", action="store_true",
+                        help="reuse the existing FP32 .tflite (skip torch conversion + parity)")
+    parser.add_argument("--out-int8", default=str(INT8_MODEL_PATH),
+                        help="output INT8 .tflite path")
+    args = parser.parse_args()
+    int8_out = Path(args.out_int8)
+
     print("=" * 60)
     print("Role 5a — INT8 Post-Training Quantization Pipeline")
     print("=" * 60)
@@ -282,22 +306,24 @@ def main():
     print(f"  Parameters: {param_count:,}")
 
     # ── 2. Convert to LiteRT FP32 ─────────────────────────────
-    print(f"\n[2/5] Converting PyTorch → LiteRT FP32 (litert-torch)...")
-    convert_to_litert_fp32(model, FP32_MODEL_PATH)
-
-    # ── 3. Parity gate ────────────────────────────────────────
-    print(f"\n[3/5] Running parity gate (PyTorch vs LiteRT FP32)...")
-    parity = run_parity_gate(model, FP32_MODEL_PATH)
+    parity = None
+    if args.skip_convert:
+        print(f"\n[2/5] --skip-convert: reusing {FP32_MODEL_PATH}")
+    else:
+        print(f"\n[2/5] Converting PyTorch → LiteRT FP32 (litert-torch)...")
+        convert_to_litert_fp32(model, FP32_MODEL_PATH)
+        # ── 3. Parity gate ────────────────────────────────────
+        print(f"\n[3/5] Running parity gate (PyTorch vs LiteRT FP32)...")
+        parity = run_parity_gate(model, FP32_MODEL_PATH)
 
     # ── 4. INT8 quantization ──────────────────────────────────
     print(f"\n[4/5] Quantizing to INT8 PTQ...")
-    print(f"  Representative samples: {NUM_CALIBRATION_SAMPLES} (synthetic sRGB [0,1])")
-    print(f"  NOTE: Final run MUST use real SIDD train/val data (rule Q2)")
-    quantize_int8(FP32_MODEL_PATH, INT8_MODEL_PATH)
+    calib_source, calib_n = quantize_int8(FP32_MODEL_PATH, int8_out,
+                                          calibration_dir=args.calibration_dir and Path(args.calibration_dir))
 
     # ── 5. Evaluate FP32 vs INT8 ──────────────────────────────
     print(f"\n[5/5] Evaluating FP32 vs INT8 quality delta...")
-    eval_results = evaluate_fp32_vs_int8(FP32_MODEL_PATH, INT8_MODEL_PATH)
+    eval_results = evaluate_fp32_vs_int8(FP32_MODEL_PATH, int8_out)
 
     psnrs = [r["psnr_fp32_vs_int8"] for r in eval_results]
     ssims = [r["ssim_fp32_vs_int8"] for r in eval_results]
@@ -315,7 +341,7 @@ def main():
     # ── 6. File sizes ─────────────────────────────────────────
     print(f"\n  --- File Sizes ---")
     fp32_size = FP32_MODEL_PATH.stat().st_size
-    int8_size = INT8_MODEL_PATH.stat().st_size
+    int8_size = int8_out.stat().st_size
     pth_size = CHECKPOINT_PATH.stat().st_size
 
     print(f"  PyTorch .pth:   {pth_size:>10,} bytes")
@@ -343,8 +369,8 @@ def main():
         },
         "int8_evaluation": {
             "num_samples": len(eval_results),
-            "calibration_samples": NUM_CALIBRATION_SAMPLES,
-            "calibration_source": "synthetic_srgb_smoke_test",
+            "calibration_samples": calib_n,
+            "calibration_source": calib_source,
             "mean_psnr_fp32_vs_int8": round(mean_psnr, 4),
             "mean_ssim_fp32_vs_int8": round(mean_ssim, 6),
             "per_image": eval_results,

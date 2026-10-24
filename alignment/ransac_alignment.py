@@ -1,3 +1,4 @@
+import sys
 import cv2
 import os
 import numpy as np
@@ -7,9 +8,8 @@ BURST_DIR = "burst"
 REFERENCE_FRAME = "frame_11.jpeg"
 
 # ORB configuration
-orb = cv2.ORB_create(
-    nfeatures=2000
-)
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+orb = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
 
 # BFMatcher for ORB binary descriptors
 matcher = cv2.BFMatcher(
@@ -41,15 +41,19 @@ reference_gray = cv2.cvtColor(
 # Detect ORB features in reference
 # --------------------------------------------------
 
-kp_ref, des_ref = orb.detectAndCompute(
-    reference_gray,
-    None
-)
+kp_ref, des_ref = orb.detectAndCompute(clahe.apply(reference_gray), None)
 
 if des_ref is None:
-    raise RuntimeError(
-        "Could not compute descriptors for reference frame."
-    )
+    print(f"Reference frame: {REFERENCE_FRAME}")
+    print("Reference keypoints: 0")
+    for filename in sorted(os.listdir(BURST_DIR)):
+        if not filename.lower().endswith((".jpg", ".jpeg", ".png")):
+            continue
+        if filename == REFERENCE_FRAME:
+            continue
+        print(f"\n{filename}")
+        print("Not enough keypoints/descriptors.")
+    sys.exit(0)
 
 print(f"Reference frame: {REFERENCE_FRAME}")
 print(f"Reference keypoints: {len(kp_ref)}")
@@ -86,10 +90,7 @@ for filename in sorted(os.listdir(BURST_DIR)):
     # ORB detection
     # ----------------------------------------------
 
-    kp, des = orb.detectAndCompute(
-        gray,
-        None
-    )
+    kp, des = orb.detectAndCompute(clahe.apply(gray), None)
 
     if des is None or len(kp) < 4:
         print(f"\n{filename}")
@@ -140,14 +141,7 @@ for filename in sorted(os.listdir(BURST_DIR)):
     # RANSAC homography
     # ----------------------------------------------
 
-    H, mask = cv2.findHomography(
-        src_points,
-        dst_points,
-        cv2.RANSAC,
-        5.0,
-        maxIters=2000,
-        confidence=0.995
-    )
+    H, mask = cv2.findHomography(src_points, dst_points, cv2.USAC_MAGSAC, 3.0, maxIters=2000, confidence=0.995)
 
     # ----------------------------------------------
     # Check RANSAC result
@@ -170,9 +164,7 @@ for filename in sorted(os.listdir(BURST_DIR)):
     # Prelude confidence score
     # ----------------------------------------------
 
-    confidence = (
-        inlier_count / total_matches
-    )
+    confidence = float(inlier_count / total_matches)
 
     print(f"RANSAC inliers: {inlier_count}")
     print(f"RANSAC confidence: {confidence:.4f}")

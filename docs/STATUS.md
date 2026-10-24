@@ -1,4 +1,4 @@
-# Prelude — Build Status (single source of truth)
+﻿# Prelude — Build Status (single source of truth)
 
 _Last updated 2026-10-02 by Role 1's **system agent** (verification pass #2): pom.xml audited,
 Testcontainers CI gate landed (16/16 backend tests incl. a caught 201-contract violation),
@@ -191,7 +191,7 @@ repo reconciled with `origin/main` (see Resolved history)._
 | Calibration tool | 1 | In-app debug mode (closed decision). Blur/texture threshold built; alignment-floor **persistence path** now exists (`CalibrationRepository.save/load`), calculator still stubbed pending Role 2's on-device classifier; min-frame-count + inference timeout stubbed, blocked on Roles 3/4/5a. |
 | Pipeline-mode orchestration (`fusion_multi`/`fusion_single`) | 1 | ✅ Pure decider (`com.prelude.pipeline.PipelineModeDecider`) reimplemented from its test — 11/11 unit tests. |
 | Batch runner | 1 | Architecture decided (on-device instrumented harness). Skeleton only — blocked on full pipeline. |
-| Alignment + confidence classifier | 2 | Not started |
+| Alignment + confidence classifier | 2 | 🟡 Prototype (synthetic, in-sample). Accuracy flat (~57.5%, 57.2% derived baseline), crashes eliminated (13% -> 0% train bursts), non-ok failures 22.4% -> 0%, correlation +0.33 -> +0.73 (train). Gated OPEN pending held-out data, ablation, CIs, ARM64 timing. |
 | Fusion (4-way) + post-process + demo UI | 3 | Phase 1 demo code in `fusion-postprocess-demo/` (strategies, tone mapping, sharpening, SSIM search — unit tested); on-device pipeline pending Role 2 |
 | Primary CNN training | 4 | Not started |
 | Quantization + deployment + discard-race | 5a | JVM: 53 tests green (10 suites, incl. DenoiseService entry-point tests + cross-language Tiler golden fixture); Python: 22 tests OK (tiler_ref, evaluate.py, submit_metrics). MEASURED on vivo V2318 (Android 16, SM7550), foreground harness, X14 freezer-checked: FP32 tile median 1869.4 / p95 1881.2 ms (N=30, untrained asset, latencyOnly); INT8 414.4 / 435.5 ms (N=100); 1024×1024 uncapped 45.4 s / 9.4 s over 25 tiles; timeoutEvent=true on both — measured tile time exceeds the 500 ms ceiling (team-lead decision pending). numThreads 1/2/4/6: no observable difference, one running thread per sample. QUALITY (VALIDATION / srgb / not held-out / not final; public SIDD validation blocks 20–39, N=50, image-disjoint from calibration): noisy baseline 24.136 dB / 0.346 SSIM; trained FP32 29.235 / 0.572; INT8 real-SIDD-calibration 28.662 / 0.539 (gap to FP32 0.574 dB; agreement 39.1 dB) — replaced the synthetic-calibration INT8 asset under A24 (asset SHA-256 b3b081ae…57a79, PROVISIONAL). DenoiseService + AssetModelSource shipped and device-smoked (OK 1 test, timeoutEvent=true at the uncalibrated 500 ms ceiling). Leakage-guard server check NOT RUN (service unreachable). Known limitations: FusedFrame size/layout gap; sRGB-vs-linear input (no conversion performed); uncalibrated timeout default; vivo fast_freezer (whitelist + foreground fix). (2026-10-04) |
@@ -205,6 +205,14 @@ repo reconciled with `origin/main` (see Resolved history)._
   `alignment/` on main) rather than picking a constant now.
 
 ## Engineering notes
+- **Role 2 alignment prototype & baseline comparison (2026-10-04)**:
+  - Evaluated on 60 synthetic bursts (299 frame pairs) via `alignment/evaluate_ransac_alignment.py`.
+  - **Accuracy flat vs baseline**: 57.2% derived baseline vs 57.5% prototype (<1.0px; Train: 51.6% vs 52.1%, Val: 72.5% vs 72.5%). Train median error slightly higher (0.90 px vs 0.75 px). The 16.7% / 18.3% numbers from earlier notes did not come from this harness.
+  - **Robustness**: Train burst crashes eliminated (6/45, 13% -> 0/45). Non-ok frame failures eliminated (67/299, 22.4% -> 0/299 across all pairs).
+  - **Calibration**: Correlation lifted from +0.33 to +0.73 (train) and +0.37 to +0.69 (val). Low bin (`< 0.30`) corrected to 0%-1% clean discard signal.
+  - **Discard Rule**: Role 3 discards if `status != "ok"` or `ransacInlierRatio < 0.30` (provisional). Band `[0.30, 0.50)` passes with ratio attached.
+  - **Reference Failure**: Current code returns `None` / exit 0. Proposed §6.2 addition (pending Role 1 review): `referenceFrameIndex = -1`, `status = "no_keypoints"`, identity fallback.
+  - **Milestone OPEN**: Parameters tuned on all 60 bursts (in-sample). Held-out validation, component ablation, bootstrap CIs, real parallax bursts, and ARM64 timing pending.
 
 - Testcontainers smoke test (migrate + happy path + conflict path) stays as a CI gate — standard regression coverage, not a live unknown.
 - Manifest admin auth is intentionally minimal (Q6); treat it as a convenience lock, not a security boundary.

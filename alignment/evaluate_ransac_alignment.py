@@ -38,10 +38,11 @@ def wilson(k, n, z=1.96):
 
 def replica(ref_g, cur_g):
     """Same estimation as ransac_alignment.py. Returns (status, H, n_matches, inliers, confidence)."""
-    orb = cv2.ORB_create(nfeatures=2000)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    orb = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    kr, dr = orb.detectAndCompute(ref_g, None)
-    kc, dc = orb.detectAndCompute(cur_g, None)
+    kr, dr = orb.detectAndCompute(clahe.apply(ref_g), None)
+    kc, dc = orb.detectAndCompute(clahe.apply(cur_g), None)
     if dr is None or dc is None or len(kc) < 4:
         return "no_keypoints", None, 0, 0, 0.0
     ms = sorted(bf.match(dr, dc), key=lambda m: m.distance)
@@ -49,11 +50,12 @@ def replica(ref_g, cur_g):
         return "lt4_matches", None, len(ms), 0, 0.0
     src = np.float32([kr[m.queryIdx].pt for m in ms]).reshape(-1, 1, 2)
     dst = np.float32([kc[m.trainIdx].pt for m in ms]).reshape(-1, 1, 2)
-    H, mask = cv2.findHomography(src, dst, cv2.RANSAC, 5.0, maxIters=2000, confidence=0.995)
+    H, mask = cv2.findHomography(src, dst, cv2.USAC_MAGSAC, 3.0, maxIters=2000, confidence=0.995)
     if H is None or mask is None:
         return "ransac_failed", None, len(ms), 0, 0.0
     k = int(np.sum(mask.ravel() > 0))
-    return "ok", H, len(ms), k, k / len(ms)
+    conf = float(k / len(ms))
+    return "ok", H, len(ms), k, conf
 
 
 def parse_stdout(text):
@@ -95,12 +97,17 @@ def main():
     ap.add_argument("--bursts", required=True, type=Path)
     ap.add_argument("--script", required=True, type=Path)
     ap.add_argument("--limit", type=int, default=60)
+    ap.add_argument("--split", type=str, choices=["all", "train", "val"], default="all")
     ap.add_argument("--out", type=Path, default=Path("ransac_eval"))
     a = ap.parse_args()
     man = json.loads((a.bursts / "manifest.json").read_text())
     margin, size = man["margin"], man["out"]
     T = np.array([[1, 0, margin], [0, 1, margin], [0, 0, 1.0]]); TI = np.linalg.inv(T)
-    items = list(man["bursts"].items()); items = items[::max(1, len(items) // a.limit)][:a.limit]
+    items = list(man["bursts"].items())
+    if a.split != "all":
+        items = [(bid, b) for bid, b in items if b.get("split") == a.split]
+    if a.limit < len(items):
+        items = items[::max(1, len(items) // a.limit)][:a.limit]
 
     rows, crashes, script_secs, replica_secs, equiv_bad, equiv_n, repeat_diff = [], [], 0.0, 0.0, 0, 0, 0
     for bid, b in items:

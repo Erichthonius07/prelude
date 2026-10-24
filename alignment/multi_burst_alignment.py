@@ -41,11 +41,12 @@ def align_burst(burst_path):
 
     reference = images[reference_frame]
 
-    orb = cv2.ORB_create(nfeatures=2000)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    orb = cv2.ORB_create(nfeatures=3000, fastThreshold=10)
     reference_gray = cv2.cvtColor(reference, cv2.COLOR_BGR2GRAY)
 
     reference_keypoints, reference_descriptors = orb.detectAndCompute(
-        reference_gray,
+        clahe.apply(reference_gray),
         None
     )
 
@@ -91,7 +92,7 @@ def align_burst(burst_path):
         )
 
         current_keypoints, current_descriptors = orb.detectAndCompute(
-            current_gray,
+            clahe.apply(current_gray),
             None
         )
 
@@ -157,7 +158,13 @@ def align_burst(burst_path):
             continue
 
         inliers = int(np.sum(mask.ravel() > 0))
-        inlier_ratio = inliers / total_matches
+        inlier_pts = src_points[mask.ravel() > 0].reshape(-1, 2)
+        if len(inlier_pts) >= 2:
+            h_im, w_im = reference_gray.shape[:2]
+            spread = float((np.ptp(inlier_pts[:, 0]) * np.ptp(inlier_pts[:, 1])) / (w_im * h_im))
+        else:
+            spread = 0.0
+        inlier_ratio = (inliers / total_matches) * min(1.0, spread / 0.40)
 
         try:
             H_inv = np.linalg.inv(H)

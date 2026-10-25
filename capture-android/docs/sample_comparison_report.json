@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "0.1-draft",
+  "generatedAt": "2026-10-22T18:00:00Z",
+  "deviceId": "pixel-8-pro",
+  "testSetN": 40,
+  "bestFusionStrategy": "learned",
+  "postProcessSsimContribution": 0.012,
+  "learnedFusionGeneralization": { "trainSsim": 0.912, "valSsim": 0.889 },
+  "postProcessParams": { "toneGamma": 0.8, "contrast": 1.08, "sharpenAmount": 0.6, "sharpenRadius": 1, "source": "example only" },
+  "variants": [
+    { "id": "single_raw", "label": "single raw", "psnr": 28.12, "ssim": 0.811, "lpips": 0.310, "p95LatencyMs": 0, "deltaPsnrVsBaseline": null, "ci95": null, "significance": "baseline", "perImage": [ { "imageId": "t001", "psnr": 27.9, "ssim": 0.80 } ] },
+    { "id": "naive_mean", "label": "naive mean", "psnr": 29.04, "ssim": 0.842, "lpips": 0.255, "p95LatencyMs": 86, "deltaPsnrVsBaseline": 0.92, "ci95": [0.71, 1.12], "significance": "significant", "perImage": [] },
+    { "id": "trimmed_mean", "label": "trimmed mean", "psnr": 29.31, "ssim": 0.854, "lpips": 0.240, "p95LatencyMs": 102, "deltaPsnrVsBaseline": 1.19, "ci95": [0.95, 1.41], "significance": "significant", "perImage": [] },
+    { "id": "confidence_weighted", "label": "confidence weighted", "psnr": 29.68, "ssim": 0.873, "lpips": 0.221, "p95LatencyMs": 118, "deltaPsnrVsBaseline": 1.56, "ci95": [1.30, 1.80], "significance": "significant", "perImage": [] },
+    { "id": "learned_fusion", "label": "learned fusion", "psnr": 30.01, "ssim": 0.889, "lpips": 0.205, "p95LatencyMs": 164, "deltaPsnrVsBaseline": 1.89, "ci95": [1.41, 2.40], "significance": "directional", "perImage": [] },
+    { "id": "full_pipeline", "label": "full pipeline", "psnr": 31.96, "ssim": 0.941, "lpips": 0.082, "p95LatencyMs": 438, "deltaPsnrVsBaseline": 3.84, "ci95": [3.41, 4.22], "significance": "significant", "perImage": [] },
+    { "id": "single_frame_fallback", "label": "single-frame fallback", "psnr": 29.40, "ssim": 0.858, "lpips": 0.236, "p95LatencyMs": 290, "deltaPsnrVsBaseline": 1.28, "ci95": [1.02, 1.55], "significance": "significant", "perImage": [] }
+  ],
+  "stageGains": [
+    { "stage": "align", "deltaPsnr": 0.37, "ci95": [0.20, 0.55] },
+    { "stage": "fuse", "deltaPsnr": 1.52, "ci95": [1.20, 1.85] },
+    { "stage": "ai denoise", "deltaPsnr": 1.53, "ci95": [1.10, 1.95] },
+    { "stage": "post-process", "deltaPsnr": 0.42, "ci95": [0.25, 0.60] }
+  ]
+}

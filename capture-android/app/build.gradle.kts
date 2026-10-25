@@ -1,43 +1,38 @@
 plugins {
-    alias(libs.plugins.android.application)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.prelude.capture"
-    compileSdk = libs.versions.compileSdk.get().toInt()
+    namespace = "com.prelude"
+    compileSdk = 35
+
     defaultConfig {
-        applicationId = "com.prelude.capture"
-        minSdk = libs.versions.minSdk.get().toInt()
-        targetSdk = libs.versions.targetSdk.get().toInt()
+        applicationId = "com.prelude"
+        minSdk = 26
+        targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { viewBinding = true }
-}
-
-// AGP 9.x built-in Kotlin: the Kotlin compiler is configured through this top-level
-// extension, not android.kotlinOptions (removed in AGP 9) and not the standalone
-// kotlin-android plugin.
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-    }
+    kotlinOptions { jvmTarget = "17" }
 }
 
 dependencies {
-    implementation(project(":quantization-deploy"))
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.okhttp)
-
-    testImplementation(libs.junit)
-    // Real org.json on the JVM test classpath: the android.jar org.json stub throws in
-    // unit tests, which would make the wire-payload tests unrunnable.
-    testImplementation(libs.json)
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-ktx:1.10.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    testImplementation("junit:junit:4.13.2")
 }

@@ -1,0 +1,96 @@
+{
+ "submissionId": "d9c746e7-9dd6-42da-a2fd-958f4a1bb2a8",
+ "schemaVersion": "role3-draft-1",
+ "module": "PostProcessModule",
+ "variant": "postprocess",
+ "datasetId": "dev:fusion_residual/val/confidence",
+ "deviceId": "desktop",
+ "n": 12,
+ "createdAt": "2026-10-25T07:50:18Z",
+ "perImage": [
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b0",
+   "ssim_before": 0.821816623210907,
+   "ssim": 0.821816623210907,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b1",
+   "ssim_before": 0.6521353721618652,
+   "ssim": 0.6521353721618652,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b2",
+   "ssim_before": 0.8918702006340027,
+   "ssim": 0.8918702006340027,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b0",
+   "ssim_before": 0.7634509205818176,
+   "ssim": 0.7634509205818176,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b1",
+   "ssim_before": 0.8660926818847656,
+   "ssim": 0.8660926818847656,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b2",
+   "ssim_before": 0.8456366658210754,
+   "ssim": 0.8456366658210754,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b0",
+   "ssim_before": 0.9715731143951416,
+   "ssim": 0.9715731143951416,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b1",
+   "ssim_before": 0.9538767337799072,
+   "ssim": 0.9538767337799072,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b2",
+   "ssim_before": 0.9521751403808594,
+   "ssim": 0.9521751403808594,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b0",
+   "ssim_before": 0.9833748936653137,
+   "ssim": 0.9833748936653137,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b1",
+   "ssim_before": 0.9786469340324402,
+   "ssim": 0.9786469340324402,
+   "ssim_delta": 0.0
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b2",
+   "ssim_before": 0.9456375241279602,
+   "ssim": 0.9456375241279602,
+   "ssim_delta": 0.0
+  }
+ ],
+ "extra": {
+  "params": {
+   "gamma": 1.0,
+   "sigma": 15.0,
+   "basegamma": 1.0,
+   "radius": 1.5,
+   "amount": 0.0,
+   "threshold": 0.0
+  },
+  "tuned_on": "train",
+  "input": "fused:confidence"
+ }
+}

@@ -1,71 +1,28 @@
 package com.prelude.capture.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-import com.prelude.capture.calibration.*
-import com.prelude.capture.capture.BurstCaptureManager
-import com.prelude.capture.capture.SharpnessEstimator
-import com.prelude.capture.databinding.ActivityCalibrationBinding
-import kotlinx.coroutines.launch
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import com.prelude.capture.calibration.CalibrationRepository
 
-/** In-app calibration debug mode + runtime settings (Results Service base URL). */
-class CalibrationActivity : AppCompatActivity() {
-
-    private lateinit var binding: ActivityCalibrationBinding
-    private lateinit var repo: CalibrationRepository
-    private lateinit var calculators: List<ThresholdCalculator>
-
+class CalibrationActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityCalibrationBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        repo = CalibrationRepository(this)
-        calculators = listOf(
-            BlurTextureThresholdCalculator(repo),
-            AlignmentConfidenceFloorCalculator(),
-            MinFrameCountCalculator(),
-            InferenceTimeoutCalculator(),
-        )
-
-        binding.baseUrlInput.setText(repo.loadBaseUrl())
-        binding.saveUrlButton.setOnClickListener {
-            repo.saveBaseUrl(binding.baseUrlInput.text.toString())
-            binding.statusText.text = "Base URL saved: ${repo.loadBaseUrl()}"
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        val repository = CalibrationRepository()
+        // No camera here, so plain padding is safe: the root's background fills the bar areas, the view stays inside the safe area.
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(0xFF1F2D40.toInt())
+            addView(CalibrationView(this@CalibrationActivity, repository.load()) { repository.runCalibration() }, FrameLayout.LayoutParams(-1, -1))
         }
-        binding.runBlurButton.setOnClickListener { runBlurCalibration() }
-        refreshBlockedStatus()
-    }
-
-    private fun refreshBlockedStatus() {
-        val sb = StringBuilder()
-        calculators.filter { it.isBlocked }.forEach {
-            sb.appendLine("[${it.type}] BLOCKED — ${it.blockedReason}").appendLine()
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            WindowInsetsCompat.CONSUMED
         }
-        binding.blockedText.text = sb.ifEmpty { "No blocked calculators." }
-    }
-
-    private fun runBlurCalibration() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1); return
-        }
-        binding.statusText.text = "Capturing focus sweep…"
-        lifecycleScope.launch {
-            val cam = BurstCaptureManager(this@CalibrationActivity)
-            cam.open()
-            val raw = cam.captureBurst(BlurTextureThresholdCalculator.MIN_SAMPLES)
-            val samples = raw.map { SharpnessEstimator.features(it.first) }
-            cam.close()
-            val outcome = calculators.first { it.type == ThresholdType.BLUR_TEXTURE }.calibrate(samples)
-            binding.statusText.text = when (outcome) {
-                is CalibrationOutcome.Success -> "Blur/texture calibrated: ${outcome.summary}"
-                is CalibrationOutcome.Blocked -> "Failed: ${outcome.reason}"
-            }
-        }
+        setContentView(root)
     }
 }

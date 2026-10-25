@@ -1,0 +1,5 @@
+numpy>=1.26
+opencv-python>=4.8
+scikit-image>=0.22
+tensorflow>=2.16      # learned fusion model (team framework)
+pytest>=8

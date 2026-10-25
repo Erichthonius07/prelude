@@ -1,0 +1,101 @@
+{
+ "submissionId": "d78fb1ea-773e-4606-8fa5-9fc4987ad36b",
+ "schemaVersion": "role3-draft-1",
+ "module": "FusionModule",
+ "variant": "fusion_naive",
+ "datasetId": "dev:fusion_dataset/val",
+ "deviceId": "desktop",
+ "n": 12,
+ "createdAt": "2026-10-25T07:42:07Z",
+ "perImage": [
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b0",
+   "psnr": 36.02977293831909,
+   "ssim": 0.834221363067627,
+   "framesFused": 5,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b1",
+   "psnr": 25.175699851451988,
+   "ssim": 0.32064488530158997,
+   "framesFused": 1,
+   "strategyUsed": "single"
+  },
+  {
+   "imageId": "0063_003_GP_00100_00100_4400_N_b2",
+   "psnr": 37.980814264928604,
+   "ssim": 0.9088034629821777,
+   "framesFused": 8,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b0",
+   "psnr": 33.374917760950936,
+   "ssim": 0.6847515106201172,
+   "framesFused": 1,
+   "strategyUsed": "single"
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b1",
+   "psnr": 37.234934550057474,
+   "ssim": 0.833740234375,
+   "framesFused": 1,
+   "strategyUsed": "single"
+  },
+  {
+   "imageId": "0072_003_IP_01000_02000_5500_L_b2",
+   "psnr": 36.093870836228355,
+   "ssim": 0.8027700781822205,
+   "framesFused": 1,
+   "strategyUsed": "single"
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b0",
+   "psnr": 45.360936163135996,
+   "ssim": 0.9739747047424316,
+   "framesFused": 7,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b1",
+   "psnr": 42.19939311747483,
+   "ssim": 0.9544656872749329,
+   "framesFused": 5,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0081_004_S6_00800_00160_4400_L_b2",
+   "psnr": 41.887946586834445,
+   "ssim": 0.9544377326965332,
+   "framesFused": 5,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b0",
+   "psnr": 47.85196179199417,
+   "ssim": 0.9848836064338684,
+   "framesFused": 8,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b1",
+   "psnr": 46.59027713046502,
+   "ssim": 0.9798179268836975,
+   "framesFused": 8,
+   "strategyUsed": "naive"
+  },
+  {
+   "imageId": "0090_004_IP_01600_00750_5500_N_b2",
+   "psnr": 43.593913978748745,
+   "ssim": 0.9593494534492493,
+   "framesFused": 7,
+   "strategyUsed": "naive"
+  }
+ ],
+ "extra": {
+  "trimfrac": 0.4,
+  "floor": 0.3,
+  "inset": 48
+ }
+}

@@ -1,0 +1,131 @@
+{
+  "params": {
+    "gamma": 1.0,
+    "sigma": 15.0,
+    "basegamma": 1.0,
+    "radius": 1.5,
+    "amount": 0.0,
+    "threshold": 0.0
+  },
+  "tune_split": "train",
+  "report_split": "val",
+  "tuned_and_scored_on_same_images": false,
+  "n_tune": 57,
+  "n_report": 12,
+  "mean_ssim_before": 0.8855239003896713,
+  "mean_ssim_after": 0.8855239003896713,
+  "mean_ssim_contribution": 0.0,
+  "share_images_improved": 0.0,
+  "top10_candidates": [
+    {
+      "params": {
+        "gamma": 1.0,
+        "sigma": 15.0,
+        "basegamma": 1.0,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8547980869025514
+    },
+    {
+      "params": {
+        "gamma": 1.0,
+        "sigma": 8.0,
+        "basegamma": 1.0,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8547980869025514
+    },
+    {
+      "params": {
+        "gamma": 1.0,
+        "sigma": 25.0,
+        "basegamma": 1.0,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8547980869025514
+    },
+    {
+      "params": {
+        "gamma": 1.1,
+        "sigma": 25.0,
+        "basegamma": 0.85,
+        "radius": 1.0,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8501666862713663
+    },
+    {
+      "params": {
+        "gamma": 1.1,
+        "sigma": 25.0,
+        "basegamma": 0.85,
+        "radius": 2.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8501666862713663
+    },
+    {
+      "params": {
+        "gamma": 1.1,
+        "sigma": 25.0,
+        "basegamma": 1.0,
+        "radius": 2.5,
+        "amount": 0.0,
+        "threshold": 0.02
+      },
+      "mean_ssim": 0.8460222320598468
+    },
+    {
+      "params": {
+        "gamma": 1.1,
+        "sigma": 25.0,
+        "basegamma": 1.0,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8460222320598468
+    },
+    {
+      "params": {
+        "gamma": 1.1,
+        "sigma": 25.0,
+        "basegamma": 1.0,
+        "radius": 1.0,
+        "amount": 0.0,
+        "threshold": 0.02
+      },
+      "mean_ssim": 0.8460222320598468
+    },
+    {
+      "params": {
+        "gamma": 0.9,
+        "sigma": 8.0,
+        "basegamma": 1.0,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8395879713066837
+    },
+    {
+      "params": {
+        "gamma": 1.0,
+        "sigma": 8.0,
+        "basegamma": 0.85,
+        "radius": 1.5,
+        "amount": 0.0,
+        "threshold": 0.0
+      },
+      "mean_ssim": 0.8274409901677516
+    }
+  ]
+}

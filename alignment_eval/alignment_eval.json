@@ -1,0 +1,116 @@
+{
+  "mode": "synthetic (true motion)",
+  "bursts": 69,
+  "frames": 340,
+  "success_rate": 0.29411764705882354,
+  "success_ci95": [
+    0.24820109151301692,
+    0.3446346793768347
+  ],
+  "bursts_half_good": 21,
+  "corr_ratio_good": 0.5854939584032934,
+  "suggested_floor": null,
+  "target_precision": 0.9,
+  "threshold_table": [
+    {
+      "threshold": 0.0,
+      "kept": 1.0,
+      "precision": 0.29411764705882354
+    },
+    {
+      "threshold": 0.05,
+      "kept": 0.788235294117647,
+      "precision": 0.373134328358209
+    },
+    {
+      "threshold": 0.1,
+      "kept": 0.7617647058823529,
+      "precision": 0.3861003861003861
+    },
+    {
+      "threshold": 0.15,
+      "kept": 0.7470588235294118,
+      "precision": 0.3937007874015748
+    },
+    {
+      "threshold": 0.2,
+      "kept": 0.7294117647058823,
+      "precision": 0.4032258064516129
+    },
+    {
+      "threshold": 0.25,
+      "kept": 0.7235294117647059,
+      "precision": 0.4065040650406504
+    },
+    {
+      "threshold": 0.3,
+      "kept": 0.7088235294117647,
+      "precision": 0.4149377593360996
+    },
+    {
+      "threshold": 0.35,
+      "kept": 0.6705882352941176,
+      "precision": 0.4342105263157895
+    },
+    {
+      "threshold": 0.4,
+      "kept": 0.6205882352941177,
+      "precision": 0.46919431279620855
+    },
+    {
+      "threshold": 0.45,
+      "kept": 0.5705882352941176,
+      "precision": 0.4896907216494845
+    },
+    {
+      "threshold": 0.5,
+      "kept": 0.538235294117647,
+      "precision": 0.4972677595628415
+    },
+    {
+      "threshold": 0.55,
+      "kept": 0.5058823529411764,
+      "precision": 0.5232558139534884
+    },
+    {
+      "threshold": 0.6,
+      "kept": 0.4176470588235294,
+      "precision": 0.6056338028169014
+    },
+    {
+      "threshold": 0.65,
+      "kept": 0.36470588235294116,
+      "precision": 0.6129032258064516
+    },
+    {
+      "threshold": 0.7,
+      "kept": 0.3235294117647059,
+      "precision": 0.6636363636363637
+    },
+    {
+      "threshold": 0.75,
+      "kept": 0.29705882352941176,
+      "precision": 0.693069306930693
+    },
+    {
+      "threshold": 0.8,
+      "kept": 0.22647058823529412,
+      "precision": 0.7272727272727273
+    },
+    {
+      "threshold": 0.85,
+      "kept": 0.17941176470588235,
+      "precision": 0.7868852459016393
+    },
+    {
+      "threshold": 0.9,
+      "kept": 0.11470588235294117,
+      "precision": 0.8205128205128205
+    },
+    {
+      "threshold": 0.95,
+      "kept": 0.011764705882352941,
+      "precision": 0.75
+    }
+  ]
+}

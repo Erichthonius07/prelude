@@ -1,0 +1,63 @@
+{
+  "datasetId": "dev:fusion_dataset/val",
+  "n": 12,
+  "inset": 48,
+  "trimfrac": 0.4,
+  "floor": 0.0,
+  "strategies": {
+    "reference_frame": {
+      "mean_psnr": 32.919766679898004,
+      "mean_ssim": 0.6861710424224535
+    },
+    "naive": {
+      "mean_psnr": 40.358986007708204,
+      "mean_ssim": 0.928565040230751,
+      "median_ms_desktop": 3.3473264999202
+    },
+    "trimmed": {
+      "mean_psnr": 40.447506030502865,
+      "mean_ssim": 0.9258885830640793,
+      "median_ms_desktop": 17.58765099998527
+    },
+    "confidence": {
+      "mean_psnr": 39.98660594866107,
+      "mean_ssim": 0.8816459427277247,
+      "median_ms_desktop": 5.192308000005141
+    },
+    "learned": {
+      "mean_psnr": 41.58222661051142,
+      "mean_ssim": 0.9351871709028879,
+      "median_ms_desktop": 60.53079050002452
+    }
+  },
+  "best_by_mean_ssim": "learned",
+  "best_vs_others_ssim_bootstrap": {
+    "naive": {
+      "mean_diff": 0.006622130672136943,
+      "ci95": [
+        0.002505939826369286,
+        0.011763310432434077
+      ],
+      "n": 12,
+      "verdict": "separated (uncorrected)"
+    },
+    "trimmed": {
+      "mean_diff": 0.009298587838808695,
+      "ci95": [
+        0.0037614740431308746,
+        0.016717225809892013
+      ],
+      "n": 12,
+      "verdict": "separated (uncorrected)"
+    },
+    "confidence": {
+      "mean_diff": 0.05354122817516327,
+      "ci95": [
+        0.016497564067443213,
+        0.09713129475712774
+      ],
+      "n": 12,
+      "verdict": "separated (uncorrected)"
+    }
+  }
+}

@@ -1,99 +1,108 @@
-# training/inference.py
+# training/inference_med.py
+import os
+import platform
+
+# 1. Silence TensorFlow C++ oneDNN and CPU instruction logs
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+# 2. On native Windows, enable Keras 3 GPU acceleration via CUDA if available
+if platform.system() == "Windows":
+    try:
+        import torch
+        if torch.cuda.is_available():
+            os.environ["KERAS_BACKEND"] = "torch"
+    except ImportError:
+        pass
+
 import math
-import torch
-import torch.nn.functional as F
+import keras
 import numpy as np
-from PIL import Image
+import tensorflow as tf
 import matplotlib.pyplot as plt
+from PIL import Image
 
-from model import DnCNN
+def to_numpy(tensor) -> np.ndarray:
+    """Safely converts any backend tensor (PyTorch CUDA, TF, or Keras) to a CPU NumPy array."""
+    if hasattr(tensor, "detach"):
+        return tensor.detach().cpu().numpy()
+    if hasattr(tensor, "numpy"):
+        return tensor.numpy()
+    return keras.ops.convert_to_numpy(tensor)
 
-def estimate_noise_std(img_tensor: torch.Tensor) -> float:
-    """
-    Immerkaer's Fast Noise Variance Estimation.
-    Mathematically estimates the standard deviation of noise in an image 
-    without needing a clean ground-truth reference.
-    """
-    # 1. Convert image to grayscale for structural analysis
-    gray = (0.2989 * img_tensor[:, 0:1, :, :] + 
-            0.5870 * img_tensor[:, 1:2, :, :] + 
-            0.1140 * img_tensor[:, 2:3, :, :])
+def estimate_blind_noise_sigma(img_arr: np.ndarray) -> float:
+    """Immerkaer's Fast Noise Variance Estimation using a 3x3 Laplacian operator[cite: 70]."""
+    # Ensure input is a 4D TensorFlow tensor [1, H, W, 3] on CPU for metric calculation
+    if img_arr.ndim == 3:
+        img_arr = np.expand_dims(img_arr, axis=0)
     
-    # 2. Immerkaer's 3x3 Laplacian kernel to isolate high-frequency grain
-    kernel = torch.tensor([
-        [ 1.0, -2.0,  1.0], 
-        [-2.0,  4.0, -2.0], 
-        [ 1.0, -2.0,  1.0]
-    ], device=img_tensor.device).view(1, 1, 3, 3)
-    
-    # 3. Apply the filter and calculate the standard deviation (sigma)
-    laplacian = F.conv2d(gray, kernel, padding=0)
-    sigma = torch.sum(torch.abs(laplacian)) * math.sqrt(0.5 * math.pi) / (6 * laplacian.numel())
-    
-    # Convert from [0.0, 1.0] scale to standard [0, 255] pixel scale
-    return sigma.item() * 255.0
+    with tf.device("/CPU:0"):
+        img_tf = tf.convert_to_tensor(img_arr, dtype=tf.float32)
+        gray = tf.image.rgb_to_grayscale(img_tf) * 255.0
 
-def run_inference_with_analysis(image_path: str, model_path: str, output_path: str):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running analytical inference on: {device}")
-    
-    model = DnCNN().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-    model.eval()
+        kernel = tf.constant([
+            [ 1.0, -2.0,  1.0],
+            [-2.0,  4.0, -2.0],
+            [ 1.0, -2.0,  1.0]
+        ], dtype=tf.float32)
+        kernel = tf.reshape(kernel, [3, 3, 1, 1])
 
-    # Load and prepare image
-    img = Image.open(image_path).convert("RGB")
-    noisy_tensor = torch.from_numpy(np.array(img)).permute(2, 0, 1).float().unsqueeze(0) / 255.0
-    noisy_tensor = noisy_tensor.to(device)
+        conv = tf.nn.conv2d(gray, kernel, strides=[1, 1, 1, 1], padding="VALID")
+        h, w = int(conv.shape[1]), int(conv.shape[2])
+        sigma = tf.reduce_sum(tf.abs(conv)) * math.sqrt(0.5 * math.pi) / (6.0 * float(w * h))
+        return float(sigma.numpy())
 
-    # Process through the AI
-    with torch.no_grad():
-        denoised_tensor = torch.clamp(model(noisy_tensor), 0.0, 1.0)
-        
-        # Calculate the exact noise the AI extracted (Original - Clean = Noise)
-        extracted_noise_tensor = torch.clamp(noisy_tensor - denoised_tensor + 0.5, 0.0, 1.0)
+def run_inference(
+    image_path: str = "noisy_image.jpg",
+    model_path: str = "dncnn_best_med.keras",
+    output_report: str = "denoise_analysis_report_med.jpg",
+    max_dim: int = 512
+):
+    model = keras.models.load_model(model_path)
 
-    # Calculate blind noise levels using Immerkaer's formula
-    noise_lvl_orig = estimate_noise_std(noisy_tensor)
-    noise_lvl_clean = estimate_noise_std(denoised_tensor)
-    reduction_percent = ((noise_lvl_orig - noise_lvl_clean) / noise_lvl_orig) * 100
+    orig_img = Image.open(image_path).convert("RGB")
+    w, h = orig_img.size
 
-    print("-" * 40)
-    print("🔬 NOISE REDUCTION ANALYSIS")
-    print(f"Original Noise Level (σ): {noise_lvl_orig:.2f}")
-    print(f"Denoised Noise Level (σ): {noise_lvl_clean:.2f}")
-    print(f"Total Noise Reduced:      {reduction_percent:.1f}%")
-    print("-" * 40)
+    # Prevent RTX 3050 VRAM OOM by scaling down high-resolution frames for inference testing
+    if max(w, h) > max_dim:
+        scale = max_dim / max(w, h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        orig_img = orig_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        print(f"Resized test image from {w}x{h} to {new_w}x{new_h} to fit within GPU VRAM.")
 
-    # Convert tensors back to visual images
-    noisy_img = (noisy_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
-    denoised_img = (denoised_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
-    
-    # The noise map is shifted by 128 (0.5) so negative noise is visible as dark gray
-    noise_map_img = (extracted_noise_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)
+    orig_arr = np.asarray(orig_img, dtype=np.float32) / 255.0
+    input_batch = np.expand_dims(orig_arr, axis=0)
 
-    # Generate a visual analytical report
-    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    
-    axes[0].imshow(noisy_img)
-    axes[0].set_title(f"Original (Noise σ: {noise_lvl_orig:.2f})")
-    
-    axes[1].imshow(denoised_img)
-    axes[1].set_title(f"Denoised (Noise σ: {noise_lvl_clean:.2f})")
-    
-    axes[2].imshow(noise_map_img)
-    axes[2].set_title(f"Extracted AI Noise Map\n(Reduction: {reduction_percent:.1f}%)")
+    # Run model prediction and safely move output from GPU to CPU NumPy array
+    raw_output = model(input_batch, training=False)
+    pred_np = to_numpy(raw_output)
 
-    for ax in axes:
-        ax.axis("off")
+    # Clip values to valid image range [0.0, 1.0]
+    denoised_arr = np.clip(pred_np[0], 0.0, 1.0)
+    noise_map = orig_arr - denoised_arr
+
+    orig_sigma = estimate_blind_noise_sigma(orig_arr)
+    den_sigma = estimate_blind_noise_sigma(denoised_arr)
+    reduction_pct = ((orig_sigma - den_sigma) / orig_sigma) * 100.0 if orig_sigma > 0 else 0.0
+
+    vis_noise = np.clip(noise_map * 3.0 + 0.5, 0.0, 1.0)
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    axes[0].imshow(orig_arr)
+    axes[0].set_title(f"Original (Noise σ: {orig_sigma:.2f})")
+    axes[0].axis("off")
+
+    axes[1].imshow(denoised_arr)
+    axes[1].set_title(f"Denoised (Noise σ: {den_sigma:.2f})")
+    axes[1].axis("off")
+
+    axes[2].imshow(vis_noise)
+    axes[2].set_title(f"Extracted AI Noise Map\n(Reduction: {reduction_pct:.1f}%)")
+    axes[2].axis("off")
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
-    print(f"Analysis saved to {output_path}")
+    plt.savefig(output_report, dpi=200)
+    print(f"Saved analysis report to {output_report}")
 
 if __name__ == "__main__":
-    run_inference_with_analysis(
-        image_path="noisy_zee.jpeg", 
-        model_path="dncnn_best_med.pth",        
-        output_path="denoise_analysis_report_zee_med.png"
-    )
+    run_inference()

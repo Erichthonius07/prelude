@@ -1,48 +1,54 @@
 # training/model.py
-import torch
-import torch.nn as nn
+import tensorflow as tf
+from tensorflow.keras import layers, models
 
-class DnCNN(nn.Module):
-    def __init__(self, in_channels: int = 3, out_channels: int = 3, num_features: int = 64, num_layers: int = 17):
-        """
-        A lightweight Denoising Convolutional Neural Network (DnCNN) optimized for mobile deployment.
-        
-        Args:
-            in_channels: Number of color channels in the input image (3 for RGB).
-            out_channels: Number of color channels in the output noise map (3 for RGB).
-            num_features: Number of filters/channels in the hidden layers.
-            num_layers: Total number of convolutional layers. 17 is standard for DnCNN.
-        """
-        super(DnCNN, self).__init__()
-        
-        layers = []
-        
-        # Layer 1: Initial feature extraction (Convolution + ReLU activation, no Batch Normalization)
-        layers.append(nn.Conv2d(in_channels, num_features, kernel_size=3, padding=1, bias=False))
-        layers.append(nn.ReLU(inplace=True))
-        
-        # Layers 2 to (num_layers - 1): Deep feature processing
-        for _ in range(num_layers - 2):
-            layers.append(nn.Conv2d(num_features, num_features, kernel_size=3, padding=1, bias=False))
-            # Batch Normalization stabilizes the math during training
-            layers.append(nn.BatchNorm2d(num_features))
-            layers.append(nn.ReLU(inplace=True))
-            
-        # Final Layer: Reconstruct the noise map (Convolution only)
-        layers.append(nn.Conv2d(num_features, out_channels, kernel_size=3, padding=1, bias=False))
-        
-        # Group everything into a single sequential pipeline
-        self.network = nn.Sequential(*layers)
+def build_dncnn(num_layers: int = 17, features: int = 64, channels: int = 3) -> tf.keras.Model:
+    """
+    Builds the resolution-agnostic DnCNN model using residual learning.
+    Default: 17 layers, 64 channels (~557k parameters).
+    Still-capture variant: num_layers=9, features=32 (~66k parameters).
+    """
+    inputs = layers.Input(shape=(None, None, channels), name="input")
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass using Residual Learning.
-        Instead of predicting the clean image, the network predicts the noise.
-        """
-        # The network extracts the noise (grain/artifacts) from the original image
-        predicted_noise = self.network(x)
-        
-        # Subtract the predicted noise from the original image to get the clean result
-        clean_image = x - predicted_noise
-        
-        return clean_image
+    # Layer 1: Conv + ReLU (no BatchNorm on the first layer)
+    x = layers.Conv2D(
+        filters=features,
+        kernel_size=(3, 3),
+        padding="same",
+        use_bias=True,
+        kernel_initializer="he_normal",
+        name="conv_1"
+    )(inputs)
+    x = layers.ReLU(name="relu_1")(x)
+
+    # Layers 2 to (num_layers - 1): Conv + BatchNorm + ReLU
+    for i in range(2, num_layers):
+        x = layers.Conv2D(
+            filters=features,
+            kernel_size=(3, 3),
+            padding="same",
+            use_bias=False,
+            kernel_initializer="he_normal",
+            name=f"conv_{i}"
+        )(x)
+        x = layers.BatchNormalization(name=f"bn_{i}")(x)
+        x = layers.ReLU(name=f"relu_{i}")(x)
+
+    # Final Layer: Predict the 3-channel residual noise map
+    predicted_noise = layers.Conv2D(
+        filters=channels,
+        kernel_size=(3, 3),
+        padding="same",
+        use_bias=True,
+        kernel_initializer="he_normal",
+        name="predicted_noise"
+    )(x)
+
+    # Residual subtraction: Clean Image = Noisy Input - Predicted Noise
+    denoised_output = layers.Subtract(name="output")([inputs, predicted_noise])
+
+    return models.Model(inputs=inputs, outputs=denoised_output, name=f"DnCNN_{num_layers}L")
+
+if __name__ == "__main__":
+    model = build_dncnn()
+    model.summary()
